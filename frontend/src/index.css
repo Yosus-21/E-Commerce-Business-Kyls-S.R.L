@@ -1,0 +1,39 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Roboto:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Swiper Navigation Buttons */
+@layer components {
+
+    .swiper-button-next,
+    .swiper-button-prev {
+        @apply bg-gray-200/80 backdrop-blur-sm rounded-full w-12 h-12 transition-all duration-300;
+        color: #4B5563 !important;
+        /* Gray-700 */
+    }
+
+    .swiper-button-next:hover,
+    .swiper-button-prev:hover {
+        @apply bg-gray-300/90 scale-110 shadow-lg;
+        color: #374151 !important;
+        /* Gray-800 on hover */
+    }
+
+    .swiper-button-next::after,
+    .swiper-button-prev::after {
+        font-size: 1.25rem !important;
+        font-weight: bold !important;
+    }
+
+    /* Opcional: Ocultar en mobile */
+    @media (max-width: 768px) {
+
+        .swiper-button-next,
+        .swiper-button-prev {
+            @apply hidden;
+        }
+    }
+}
