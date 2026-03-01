@@ -181,7 +181,7 @@ const AdminUsersPage = () => {
                             </thead>
                             <tbody className="divide-y divide-secondary-200">
                                 {users.map((user) => (
-                                    <tr key={user._id} className="hover:bg-secondary-50 transition-colors">
+                                    <tr key={user.id} className="hover:bg-secondary-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center">
                                                 <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-semibold">
@@ -221,12 +221,12 @@ const AdminUsersPage = () => {
                                                 <Button
                                                     variant={user.role === 'admin' ? 'outline' : 'primary'}
                                                     size="sm"
-                                                    onClick={() => handleChangeRole(user._id, user.role, user.name)}
+                                                    onClick={() => handleChangeRole(user.id, user.role, user.name)}
                                                 >
                                                     {user.role === 'admin' ? 'Quitar Admin' : 'Hacer Admin'}
                                                 </Button>
                                                 <button
-                                                    onClick={() => handleDelete(user._id, user.name)}
+                                                    onClick={() => handleDelete(user.id, user.name)}
                                                     className="p-2 text-danger-700 hover:bg-danger-50 rounded-lg transition-colors"
                                                     title="Eliminar usuario"
                                                 >

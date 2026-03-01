@@ -1,33 +1,85 @@
-const Cart = require('../models/Cart');
-const Product = require('../models/Product');
+const { Op } = require('sequelize');
+const { Cart, CartItem, Product } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 
+// ====================================
+// HELPER: Cargar carrito con JOIN profundo
+// Cart → CartItems → Product
+// Equivalente al .populate('items.product') de Mongoose
+// ====================================
+const loadCartWithItems = async (userId) => {
+    return await Cart.findOne({
+        where: { userId },
+        include: [
+            {
+                model: CartItem,
+                as: 'CartItems',
+                include: [
+                    {
+                        model: Product,
+                        as: 'product',
+                        attributes: ['id', 'name', 'price', 'stock', 'images', 'slug', 'isActive'],
+                        required: false  // LEFT JOIN: CartItem puede tener productId=null (SET NULL)
+                    }
+                ]
+            }
+        ]
+    });
+};
+
+// ====================================
+// HELPER: Recalcular y guardar totalAmount del carrito
+// Reemplaza el hook pre('save', calculateTotal) de Mongoose
+// ====================================
+const recalculateCartTotal = async (cart) => {
+    const freshCart = await loadCartWithItems(cart.userId);
+    // ✅ Excluir items huérfanos (producto eliminado → productId SET NULL)
+    const validItems = (freshCart.CartItems || []).filter(item => item.product !== null);
+    const total = validItems.reduce(
+        (sum, item) => sum + Number(item.price) * item.quantity,
+        0
+    );
+    cart.totalAmount = parseFloat(total.toFixed(2));
+    await cart.save();
+    return cart.totalAmount;
+};
+
 /**
- * @desc    Obtener carrito del usuario
+ * @desc    Obtener el carrito del usuario
  * @route   GET /api/cart
  * @access  Private
  */
 exports.getCart = asyncHandler(async (req, res) => {
-    // Buscar carrito del usuario con populate de productos
-    let cart = await Cart.findOne({ user: req.user._id })
-        .populate('items.product', 'name price images stock isActive');
+    let cart = await loadCartWithItems(req.user.id);
 
-    // Si no existe carrito, crear uno vacío
+    // Si no existe carrito, crear uno vacío (FindOrCreate pattern)
     if (!cart) {
-        cart = await Cart.create({
-            user: req.user._id,
-            items: [],
-            totalAmount: 0
-        });
+        cart = await Cart.create({ userId: req.user.id, totalAmount: 0 });
+        cart.CartItems = [];
     }
 
-    // Agregar campo virtual itemCount
-    const itemCount = cart.items.reduce((total, item) => total + item.quantity, 0);
+    // ✅ Filtrar items huérfanos: producto fue eliminado del catálogo (productId=null)
+    const allItems = cart.CartItems || [];
+    const validItems = allItems.filter(item => item.product !== null);
+    const orphans = allItems.length - validItems.length;
+
+    // Si había huérfanos, eliminarlos y recalcular el total
+    if (orphans > 0) {
+        const orphanIds = allItems
+            .filter(item => item.product === null)
+            .map(item => item.id);
+        await CartItem.destroy({ where: { id: orphanIds } });
+        await recalculateCartTotal(cart);
+    }
+
+    const itemCount = validItems.length;
 
     res.status(200).json({
         success: true,
         data: {
-            ...cart.toObject(),
+            id: cart.id,
+            items: validItems,
+            totalAmount: cart.totalAmount,
             itemCount
         }
     });
@@ -39,216 +91,206 @@ exports.getCart = asyncHandler(async (req, res) => {
  * @access  Private
  */
 exports.addToCart = asyncHandler(async (req, res) => {
-    const { productId, quantity } = req.body;
+    console.log('CARRITO POST BODY:', req.body);
+    const { productId, quantity = 1 } = req.body;
 
-    // ====================================
-    // VALIDAR PRODUCTO
-    // ====================================
-    const product = await Product.findById(productId);
-
-    if (!product) {
-        return res.status(404).json({
-            success: false,
-            message: 'Producto no encontrado'
-        });
-    }
-
-    if (!product.isActive) {
+    if (!productId || quantity < 1) {
         return res.status(400).json({
             success: false,
-            message: 'Producto no disponible'
+            message: 'productId y una cantidad válida son requeridos'
         });
     }
 
+    // 1. Verificar que el producto existe y tiene stock suficiente
+    const product = await Product.findByPk(productId);
+    if (!product || !product.isActive) {
+        return res.status(404).json({ success: false, message: 'Producto no encontrado' });
+    }
     if (product.stock < quantity) {
         return res.status(400).json({
             success: false,
-            message: `Stock insuficiente. Solo hay ${product.stock} unidades disponibles`
+            message: `Stock insuficiente. Disponible: ${product.stock}`
         });
     }
 
-    // ====================================
-    // BUSCAR O CREAR CARRITO
-    // ====================================
-    let cart = await Cart.findOne({ user: req.user._id });
+    // 2. Obtener o crear el carrito del usuario
+    let [cart] = await Cart.findOrCreate({
+        where: { userId: req.user.id },
+        defaults: { userId: req.user.id, totalAmount: 0 }
+    });
 
-    if (!cart) {
-        cart = await Cart.create({
-            user: req.user._id,
-            items: []
-        });
-    }
+    // 3. Verificar si el producto ya está en el carrito
+    //    (equivalente al cart.items.findIndex() de Mongoose)
+    const existingItem = await CartItem.findOne({
+        where: { cartId: cart.id, productId }
+    });
 
-    // ====================================
-    // VERIFICAR SI PRODUCTO YA ESTÁ EN CARRITO
-    // ====================================
-    const existingItemIndex = cart.items.findIndex(
-        item => item.product.toString() === productId
-    );
-
-    if (existingItemIndex > -1) {
-        // Producto ya existe, actualizar cantidad
-        const newQuantity = cart.items[existingItemIndex].quantity + quantity;
-
-        // Validar stock para la nueva cantidad
+    if (existingItem) {
+        // 4a. Item existente → validar stock total y actualizar cantidad
+        const newQuantity = existingItem.quantity + parseInt(quantity);
         if (product.stock < newQuantity) {
             return res.status(400).json({
                 success: false,
-                message: `Stock insuficiente. Solo hay ${product.stock} unidades disponibles`
+                message: `Stock insuficiente. Máximo disponible: ${product.stock}`
             });
         }
-
-        cart.items[existingItemIndex].quantity = newQuantity;
+        existingItem.quantity = newQuantity;
+        existingItem.price = product.price; // actualizar precio por si cambió
+        await existingItem.save();
     } else {
-        // Producto nuevo, agregar al carrito
-        cart.items.push({
-            product: productId,
-            quantity,
+        // 4b. Item nuevo → crear registro en CartItems
+        await CartItem.create({
+            cartId: cart.id,
+            productId: product.id,
+            quantity: parseInt(quantity),
             price: product.price
         });
     }
 
-    // Guardar carrito (el middleware pre-save calculará el total)
-    await cart.save();
+    // 5. Recalcular total del carrito
+    await recalculateCartTotal(cart);
 
-    // Populate y retornar
-    await cart.populate('items.product', 'name price images stock isActive');
+    // 6. Retornar carrito actualizado con JOIN profundo
+    const updatedCart = await loadCartWithItems(req.user.id);
 
     res.status(200).json({
         success: true,
-        data: cart,
+        data: {
+            id: updatedCart.id,
+            items: updatedCart.CartItems,
+            totalAmount: updatedCart.totalAmount,
+            itemCount: updatedCart.CartItems.length
+        },
         message: 'Producto agregado al carrito'
     });
 });
 
 /**
- * @desc    Actualizar cantidad de un item del carrito
- * @route   PUT /api/cart/update/:itemId
+ * @desc    Actualizar cantidad de un ítem del carrito
+ * @route   PUT /api/cart/:itemId
  * @access  Private
  */
 exports.updateCartItem = asyncHandler(async (req, res) => {
-    const { itemId } = req.params;
     const { quantity } = req.body;
+    const { itemId } = req.params;
 
-    // Validar que quantity sea al moins 1
     if (!quantity || quantity < 1) {
-        return res.status(400).json({
-            success: false,
-            message: 'La cantidad debe ser al menos 1'
-        });
+        return res.status(400).json({ success: false, message: 'Cantidad inválida' });
     }
 
-    // Buscar carrito del usuario
-    const cart = await Cart.findOne({ user: req.user._id });
-
+    // Obtener carrito del usuario
+    const cart = await Cart.findOne({ where: { userId: req.user.id } });
     if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Carrito no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Carrito no encontrado' });
     }
 
-    // Encontrar item en el carrito
-    const item = cart.items.id(itemId);
+    // Buscar el ítem verificando que pertenece al carrito del usuario
+    const cartItem = await CartItem.findOne({
+        where: { id: itemId, cartId: cart.id },
+        include: [{ model: Product, as: 'product', attributes: ['id', 'stock', 'price'] }]
+    });
 
-    if (!item) {
-        return res.status(404).json({
-            success: false,
-            message: 'Producto no encontrado en el carrito'
-        });
+    if (!cartItem) {
+        return res.status(404).json({ success: false, message: 'Ítem no encontrado en el carrito' });
     }
 
-    // Validar stock del producto
-    const product = await Product.findById(item.product);
-
-    if (!product) {
-        return res.status(404).json({
-            success: false,
-            message: 'Producto no encontrado'
-        });
-    }
-
-    if (product.stock < quantity) {
+    // Validar stock
+    if (cartItem.product.stock < quantity) {
         return res.status(400).json({
             success: false,
-            message: `Stock insuficiente. Solo hay ${product.stock} unidades disponibles`
+            message: `Stock insuficiente. Disponible: ${cartItem.product.stock}`
         });
     }
 
-    // Actualizar cantidad
-    item.quantity = quantity;
+    // Actualizar cantidad y precio (por si cambió)
+    cartItem.quantity = parseInt(quantity);
+    cartItem.price = cartItem.product.price;
+    await cartItem.save();
 
-    // Guardar carrito
-    await cart.save();
+    // Recalcular total
+    await recalculateCartTotal(cart);
 
-    // Populate y retornar
-    await cart.populate('items.product', 'name price images stock isActive');
+    const updatedCart = await loadCartWithItems(req.user.id);
 
     res.status(200).json({
         success: true,
-        data: cart,
-        message: 'Cantidad actualizada'
+        data: {
+            id: updatedCart.id,
+            items: updatedCart.CartItems,
+            totalAmount: updatedCart.totalAmount,
+            itemCount: updatedCart.CartItems.length
+        },
+        message: 'Carrito actualizado'
     });
 });
 
 /**
- * @desc    Eliminar producto del carrito
- * @route   DELETE /api/cart/remove/:itemId
+ * @desc    Eliminar un ítem del carrito
+ * @route   DELETE /api/cart/:itemId
  * @access  Private
  */
 exports.removeFromCart = asyncHandler(async (req, res) => {
     const { itemId } = req.params;
 
-    // Buscar carrito del usuario
-    const cart = await Cart.findOne({ user: req.user._id });
-
+    // Obtener carrito del usuario
+    const cart = await Cart.findOne({ where: { userId: req.user.id } });
     if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Carrito no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Carrito no encontrado' });
     }
 
-    // Filtrar items para remover el producto
-    cart.items = cart.items.filter(item => item._id.toString() !== itemId);
+    // Buscar ítem verificando pertenencia al carrito
+    // (seguridad: evita que un usuario borre ítems ajenos)
+    const cartItem = await CartItem.findOne({
+        where: { id: itemId, cartId: cart.id }
+    });
 
-    // Guardar carrito
-    await cart.save();
+    if (!cartItem) {
+        return res.status(404).json({ success: false, message: 'Ítem no encontrado en el carrito' });
+    }
 
-    // Populate y retornar
-    await cart.populate('items.product', 'name price images stock isActive');
+    // Eliminar el ítem (equivalente al cart.items.filter() + save de Mongoose)
+    await cartItem.destroy();
+
+    // Recalcular total
+    await recalculateCartTotal(cart);
+
+    const updatedCart = await loadCartWithItems(req.user.id);
 
     res.status(200).json({
         success: true,
-        data: cart,
-        message: 'Producto eliminado del carrito'
+        data: {
+            id: updatedCart.id,
+            items: updatedCart.CartItems,
+            totalAmount: updatedCart.totalAmount,
+            itemCount: updatedCart.CartItems.length
+        },
+        message: 'Ítem eliminado del carrito'
     });
 });
 
 /**
- * @desc    Vaciar carrito completamente
- * @route   DELETE /api/cart/clear
+ * @desc    Vaciar el carrito completamente
+ * @route   DELETE /api/cart
  * @access  Private
  */
 exports.clearCart = asyncHandler(async (req, res) => {
-    // Buscar carrito del usuario
-    const cart = await Cart.findOne({ user: req.user._id });
+    const cart = await Cart.findOne({ where: { userId: req.user.id } });
 
     if (!cart) {
-        return res.status(404).json({
-            success: false,
-            message: 'Carrito no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Carrito no encontrado' });
     }
 
-    // Vaciar items
-    cart.items = [];
+    // Eliminar TODOS los CartItems del carrito (CASCADE también lo haría,
+    // pero lo hacemos explícitamente para registrar el evento)
+    await CartItem.destroy({ where: { cartId: cart.id } });
 
-    // Guardar carrito
+    // Resetear total a 0
+    cart.totalAmount = 0;
     await cart.save();
 
     res.status(200).json({
         success: true,
+        data: { id: cart.id, items: [], totalAmount: 0, itemCount: 0 },
         message: 'Carrito vaciado exitosamente'
     });
 });

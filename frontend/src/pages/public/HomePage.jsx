@@ -8,7 +8,7 @@ import * as productService from '../../services/productService';
 import * as brandService from '../../services/brandService';
 import * as serviceService from '../../services/serviceService';
 import { useAuth } from '../../context/AuthContext';
-import { getProductImage } from '../../utils/imageHelper';
+import { getProductImage, getImageUrl } from '../../utils/imageHelper';
 
 /**
  * HomePage Component
@@ -107,23 +107,27 @@ const HomePage = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8 items-center opacity-70 grayscale hover:grayscale-0 transition-all duration-500">
-                            {brands.map((brand) => (
-                                <Link
-                                    key={brand._id}
-                                    to={`/products?brand=${brand._id}`}
-                                    className="flex justify-center p-4 hover:scale-110 transition-transform cursor-pointer"
-                                >
-                                    {brand.image ? (
-                                        <img
-                                            src={getProductImage(brand.image)}
-                                            alt={brand.name}
-                                            className="h-12 w-auto object-contain"
-                                        />
-                                    ) : (
-                                        <span className="text-xl font-bold text-gray-400">{brand.name}</span>
-                                    )}
-                                </Link>
-                            ))}
+                            {brands.map((brand) => {
+                                const brandId = brand.id || brand._id;
+                                return (
+                                    <Link
+                                        key={brandId}
+                                        to={`/products?brand=${brandId}`}
+                                        className="flex justify-center p-4 hover:scale-110 transition-transform cursor-pointer"
+                                    >
+                                        {/* ✅ brand.logo es el campo MySQL, brand.image era el de Mongo */}
+                                        {(brand.logo || brand.image) ? (
+                                            <img
+                                                src={getImageUrl(brand.logo || brand.image)}
+                                                alt={brand.name}
+                                                className="h-12 w-auto object-contain"
+                                            />
+                                        ) : (
+                                            <span className="text-xl font-bold text-gray-400">{brand.name}</span>
+                                        )}
+                                    </Link>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -151,7 +155,7 @@ const HomePage = () => {
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                             {featuredProducts.map(product => (
-                                <ProductCard key={product._id} product={product} />
+                                <ProductCard key={product.id || product._id} product={product} />
                             ))}
                         </div>
                     )}
@@ -176,7 +180,7 @@ const HomePage = () => {
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                             {discountedProducts.map(product => (
-                                <ProductCard key={product._id} product={product} />
+                                <ProductCard key={product.id || product._id} product={product} />
                             ))}
                         </div>
                     )}
@@ -198,28 +202,32 @@ const HomePage = () => {
                     <div className="grid md:grid-cols-3 gap-8">
                         {loading.services ? (
                             <div className="col-span-3 flex justify-center"><LoadingSpinner /></div>
-                        ) : services.map(service => (
-                            <div key={service._id} className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-purple-500/10 transition-all duration-300 border border-slate-100 group">
-                                <div className="mb-4 h-40 overflow-hidden rounded-xl bg-slate-100 relative">
-                                    {service.image ? (
-                                        <img
-                                            src={`${import.meta.env.VITE_API_URL}${service.image}`}
-                                            alt={service.title}
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                        />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-slate-400">
-                                            <FaConciergeBell size={40} />
-                                        </div>
-                                    )}
+                        ) : services.map(service => {
+                            const serviceId = service.id || service._id;
+                            return (
+                                <div key={serviceId} className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-purple-500/10 transition-all duration-300 border border-slate-100 group">
+                                    <div className="mb-4 h-40 overflow-hidden rounded-xl bg-slate-100 relative">
+                                        {/* ✅ service.imageUrl es el campo MySQL */}
+                                        {(service.imageUrl || service.image) ? (
+                                            <img
+                                                src={getImageUrl(service.imageUrl || service.image)}
+                                                alt={service.title}
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                            />
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-slate-400">
+                                                <FaConciergeBell size={40} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-purple-600 transition-colors">{service.title}</h3>
+                                    <p className="text-slate-500 text-sm mb-4 line-clamp-3">{service.description}</p>
+                                    <Link to={`/services/${serviceId}`} className="text-purple-600 font-medium hover:text-purple-700 text-sm inline-flex items-center">
+                                        Mas información <FaArrowRight className="ml-2 text-xs" />
+                                    </Link>
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-purple-600 transition-colors">{service.title}</h3>
-                                <p className="text-slate-500 text-sm mb-4 line-clamp-3">{service.description}</p>
-                                <Link to={`/services/${service._id}`} className="text-purple-600 font-medium hover:text-purple-700 text-sm inline-flex items-center">
-                                    Mas información <FaArrowRight className="ml-2 text-xs" />
-                                </Link>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </section>

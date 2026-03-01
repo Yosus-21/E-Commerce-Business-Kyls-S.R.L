@@ -1,4 +1,4 @@
-const Partner = require('../models/Partner');
+const { Partner } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,11 @@ const path = require('path');
  * @access  Public
  */
 exports.getActivePartners = asyncHandler(async (req, res) => {
-    const partners = await Partner.getActive();
+    // Reemplaza Partner.getActive() (método estático de Mongoose)
+    const partners = await Partner.findAll({
+        where: { isActive: true },
+        order: [['order', 'ASC'], ['createdAt', 'DESC']]
+    });
 
     res.status(200).json({
         success: true,
@@ -19,12 +23,15 @@ exports.getActivePartners = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Obtener todos los aliados (admin)
+ * @desc    Obtener todos los aliados (Admin)
  * @route   GET /api/partners/all
  * @access  Private/Admin
  */
 exports.getAllPartners = asyncHandler(async (req, res) => {
-    const partners = await Partner.find().sort({ order: 1, createdAt: -1 });
+    // Partner.find().sort({ order: 1, createdAt: -1 }) → findAll con order
+    const partners = await Partner.findAll({
+        order: [['order', 'ASC'], ['createdAt', 'DESC']]
+    });
 
     res.status(200).json({
         success: true,
@@ -39,23 +46,16 @@ exports.getAllPartners = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.createPartner = asyncHandler(async (req, res) => {
-    // Verificar que se subió un archivo
     if (!req.file) {
-        return res.status(400).json({
-            success: false,
-            message: 'Por favor sube un logo'
-        });
+        return res.status(400).json({ success: false, message: 'Por favor sube un logo' });
     }
 
-    const { name, order } = req.body;
+    const { name, website, order } = req.body;
 
-    // Construir path del logo
-    const logoPath = `partners/${req.file.filename}`;
-
-    // Crear aliado
     const partner = await Partner.create({
         name,
-        logo: logoPath,
+        logo: req.file.url,   // ← ruta normalizada
+        website: website || null,
         order: order || 0,
         isActive: true
     });
@@ -73,21 +73,31 @@ exports.createPartner = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.updatePartner = asyncHandler(async (req, res) => {
-    let partner = await Partner.findById(req.params.id);
+    // findById() → findByPk()
+    const partner = await Partner.findByPk(req.params.id);
 
     if (!partner) {
-        return res.status(404).json({
-            success: false,
-            message: 'Aliado no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Aliado no encontrado' });
     }
 
-    const { name, order, isActive } = req.body;
+    const { name, website, order, isActive } = req.body;
 
-    // Actualizar campos
-    partner.name = name || partner.name;
-    partner.order = order !== undefined ? order : partner.order;
-    partner.isActive = isActive !== undefined ? isActive : partner.isActive;
+    if (name !== undefined) partner.name = name;
+    if (website !== undefined) partner.website = website;
+    if (order !== undefined) partner.order = order;
+    if (isActive !== undefined) partner.isActive = isActive;
+
+    // Actualizar logo si se sube uno nuevo
+    if (req.file) {
+        if (partner.logo) {
+            const oldPath = path.join(process.cwd(), partner.logo);
+            if (fs.existsSync(oldPath)) {
+                try { fs.unlinkSync(oldPath); }
+                catch (err) { console.error('Error al eliminar logo anterior:', err.message); }
+            }
+        }
+        partner.logo = req.file.url;   // ← ruta normalizada
+    }
 
     await partner.save();
 
@@ -104,30 +114,24 @@ exports.updatePartner = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.deletePartner = asyncHandler(async (req, res) => {
-    const partner = await Partner.findById(req.params.id);
+    // findById() → findByPk()
+    const partner = await Partner.findByPk(req.params.id);
 
     if (!partner) {
-        return res.status(404).json({
-            success: false,
-            message: 'Aliado no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Aliado no encontrado' });
     }
 
-    // Eliminar archivo del sistema si existe
-    const logoFullPath = path.join(__dirname, '../../uploads', partner.logo);
-    if (fs.existsSync(logoFullPath)) {
-        try {
-            fs.unlinkSync(logoFullPath);
-        } catch (error) {
-            console.error('Error al eliminar archivo de logo:', error);
+    // Eliminar archivo de logo del disco
+    if (partner.logo) {
+        const absPath = path.join(process.cwd(), partner.logo);
+        if (fs.existsSync(absPath)) {
+            try { fs.unlinkSync(absPath); }
+            catch (err) { console.error('Error al eliminar archivo de logo:', err.message); }
         }
     }
 
-    // Eliminar de la base de datos
-    await partner.deleteOne();
+    // partner.deleteOne() → partner.destroy()
+    await partner.destroy();
 
-    res.status(200).json({
-        success: true,
-        message: 'Aliado eliminado exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Aliado eliminado exitosamente' });
 });

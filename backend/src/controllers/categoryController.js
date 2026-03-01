@@ -1,28 +1,36 @@
-const Category = require('../models/Category');
-const Product = require('../models/Product');
+const { Op } = require('sequelize');
+const { Category, Product } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 
 /**
- * @desc    Obtener todas las categorías activas
+ * @desc    Obtener todas las categorías activas con conteo de productos
  * @route   GET /api/categories
  * @access  Public
  */
 exports.getCategories = asyncHandler(async (req, res, next) => {
-    // Buscar todas las categorías activas
-    const categories = await Category.find({ isActive: true }).sort({ name: 1 });
+    const categories = await Category.findAll({
+        where: { isActive: true },
+        order: [['name', 'ASC']],
+        // Incluir subcategorías (auto-referencia parentId)
+        include: [
+            {
+                model: Category,
+                as: 'children',
+                where: { isActive: true },
+                required: false,
+                attributes: ['id', 'name', 'slug']
+            }
+        ]
+    });
 
-    // Contar productos por categoría
+    // Contar productos activos por categoría
+    // Product.count() con where equivale a countDocuments() de Mongoose
     const categoriesWithCount = await Promise.all(
-        categories.map(async (category) => {
-            const productCount = await Product.countDocuments({
-                category: category._id,
-                isActive: true
+        categories.map(async (cat) => {
+            const productCount = await Product.count({
+                where: { categoryId: cat.id, isActive: true }
             });
-
-            return {
-                ...category.toObject(),
-                productCount
-            };
+            return { ...cat.toJSON(), productCount };
         })
     );
 
@@ -39,30 +47,41 @@ exports.getCategories = asyncHandler(async (req, res, next) => {
  * @access  Public
  */
 exports.getCategory = asyncHandler(async (req, res, next) => {
+    const identifier = req.params.slug;
+    const whereClause = !isNaN(identifier)
+        ? { id: identifier, isActive: true }
+        : { slug: identifier, isActive: true };
+
     const category = await Category.findOne({
-        slug: req.params.slug,
-        isActive: true
+        where: whereClause,
+        include: [
+            {
+                model: Category,
+                as: 'parent',
+                attributes: ['id', 'name', 'slug'],
+                required: false
+            },
+            {
+                model: Category,
+                as: 'children',
+                where: { isActive: true },
+                required: false,
+                attributes: ['id', 'name', 'slug']
+            }
+        ]
     });
 
     if (!category) {
-        return res.status(404).json({
-            success: false,
-            error: 'Categoría no encontrada'
-        });
+        return res.status(404).json({ success: false, error: 'Categoría no encontrada' });
     }
 
-    // Contar productos de esta categoría
-    const productCount = await Product.countDocuments({
-        category: category._id,
-        isActive: true
+    const productCount = await Product.count({
+        where: { categoryId: category.id, isActive: true }
     });
 
     res.status(200).json({
         success: true,
-        data: {
-            ...category.toObject(),
-            productCount
-        }
+        data: { ...category.toJSON(), productCount }
     });
 });
 
@@ -72,12 +91,12 @@ exports.getCategory = asyncHandler(async (req, res, next) => {
  * @access  Private/Admin
  */
 exports.createCategory = asyncHandler(async (req, res, next) => {
-    const { name, description } = req.body;
+    const { name, description, parentId } = req.body;
 
-    // Crear categoría
     const category = await Category.create({
         name,
-        description
+        description,
+        parentId: parentId || null
     });
 
     res.status(201).json({
@@ -93,23 +112,28 @@ exports.createCategory = asyncHandler(async (req, res, next) => {
  * @access  Private/Admin
  */
 exports.updateCategory = asyncHandler(async (req, res, next) => {
-    const { name, description } = req.body;
+    const { name, description, parentId, isActive } = req.body;
 
-    // Buscar categoría
-    let category = await Category.findById(req.params.id);
+    // findByPk equivale a findById() de Mongoose
+    const category = await Category.findByPk(req.params.id);
 
     if (!category) {
-        return res.status(404).json({
+        return res.status(404).json({ success: false, error: 'Categoría no encontrada' });
+    }
+
+    // Evitar que una categoría se establezca como su propio padre (auto-referencia)
+    if (parentId && parseInt(parentId) === category.id) {
+        return res.status(400).json({
             success: false,
-            error: 'Categoría no encontrada'
+            error: 'Una categoría no puede ser su propio padre'
         });
     }
 
-    // Actualizar campos
-    if (name) category.name = name;
+    if (name !== undefined) category.name = name;
     if (description !== undefined) category.description = description;
+    if (parentId !== undefined) category.parentId = parentId || null;
+    if (isActive !== undefined) category.isActive = isActive;
 
-    // Guardar cambios
     await category.save();
 
     res.status(200).json({
@@ -125,19 +149,15 @@ exports.updateCategory = asyncHandler(async (req, res, next) => {
  * @access  Private/Admin
  */
 exports.deleteCategory = asyncHandler(async (req, res, next) => {
-    // Buscar categoría
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findByPk(req.params.id);
 
     if (!category) {
-        return res.status(404).json({
-            success: false,
-            error: 'Categoría no encontrada'
-        });
+        return res.status(404).json({ success: false, error: 'Categoría no encontrada' });
     }
 
-    // Verificar que no tenga productos asociados
-    const productCount = await Product.countDocuments({
-        category: req.params.id
+    // Verificar que no tenga productos activos asociados
+    const productCount = await Product.count({
+        where: { categoryId: req.params.id, isActive: true }
     });
 
     if (productCount > 0) {
@@ -147,12 +167,9 @@ exports.deleteCategory = asyncHandler(async (req, res, next) => {
         });
     }
 
-    // Soft delete - marcar como inactiva
+    // Soft delete: marcar como inactiva
     category.isActive = false;
     await category.save();
 
-    res.status(200).json({
-        success: true,
-        message: 'Categoría eliminada exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Categoría eliminada exitosamente' });
 });

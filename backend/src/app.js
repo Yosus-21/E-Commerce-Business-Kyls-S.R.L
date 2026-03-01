@@ -2,14 +2,17 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
-const mongoSanitize = require('express-mongo-sanitize');
 const xssClean = require('xss-clean');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+// NOTA: express-mongo-sanitize eliminado (era específico de MongoDB).
+// Sequelize provee protección contra SQL Injection de forma nativa
+// mediante prepared statements en todas sus queries.
 
 // Inicializar app de Express
 const app = express();
+app.set('trust proxy', 1);
 
 // ====================================
 // ⚡ CRÍTICO: ARCHIVOS ESTÁTICOS PRIMERO
@@ -74,9 +77,6 @@ const limiter = rateLimit({
     message: 'Demasiadas peticiones desde esta IP, por favor intenta de nuevo más tarde.'
 });
 app.use('/api', limiter);
-
-// Prevenir ataques NoSQL Injection
-app.use(mongoSanitize());
 
 // Prevenir ataques XSS (Cross-Site Scripting)
 app.use(xssClean());

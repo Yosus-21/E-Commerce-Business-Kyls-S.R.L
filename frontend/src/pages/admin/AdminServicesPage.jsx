@@ -155,7 +155,7 @@ const AdminServicesPage = () => {
                             </thead>
                             <tbody className="bg-white divide-y divide-secondary-200">
                                 {services.map((service) => (
-                                    <tr key={service._id} className="hover:bg-secondary-50">
+                                    <tr key={service.id} className="hover:bg-secondary-50">
                                         {/* Imagen */}
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {service.image ? (
@@ -206,14 +206,14 @@ const AdminServicesPage = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
-                                                    onClick={() => navigate(`/admin/services/edit/${service._id}`)}
+                                                    onClick={() => navigate(`/admin/services/edit/${service.id}`)}
                                                     className="text-primary-600 hover:text-primary-900 p-2 hover:bg-primary-50 rounded transition-colors"
                                                     title="Editar servicio"
                                                 >
                                                     <FaEdit />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(service._id, service.title)}
+                                                    onClick={() => handleDelete(service.id, service.title)}
                                                     className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded transition-colors"
                                                     title="Eliminar servicio"
                                                 >

@@ -4,6 +4,7 @@ import { FaPlus, FaEdit, FaTrash, FaStar } from 'react-icons/fa';
 import { Card, Button, LoadingSpinner } from '../../components/common';
 import * as brandService from '../../services/brandService';
 import { toast } from 'react-toastify';
+import { getImageUrl } from '../../utils/imageHelper';
 
 /**
  * AdminBrandsPage Component
@@ -152,12 +153,12 @@ const AdminBrandsPage = () => {
                             </thead>
                             <tbody className="bg-white divide-y divide-secondary-200">
                                 {brands.map((brand) => (
-                                    <tr key={brand._id} className="hover:bg-secondary-50">
+                                    <tr key={brand.id} className="hover:bg-secondary-50">
                                         {/* Logo */}
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {brand.image ? (
+                                            {brand.logo ? (
                                                 <img
-                                                    src={`${import.meta.env.VITE_API_URL}${brand.image}`}
+                                                    src={getImageUrl(brand.logo)}
                                                     alt={brand.name}
                                                     className="h-12 w-12 rounded object-contain bg-white border border-secondary-200"
                                                 />
@@ -193,14 +194,14 @@ const AdminBrandsPage = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
-                                                    onClick={() => navigate(`/admin/brands/edit/${brand._id}`)}
+                                                    onClick={() => navigate(`/admin/brands/edit/${brand.id}`)}
                                                     className="text-primary-600 hover:text-primary-900 p-2 hover:bg-primary-50 rounded transition-colors"
                                                     title="Editar marca"
                                                 >
                                                     <FaEdit />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(brand._id, brand.name)}
+                                                    onClick={() => handleDelete(brand.id, brand.name)}
                                                     className="text-red-600 hover:text-red-900 p-2 hover:bg-red-50 rounded transition-colors"
                                                     title="Eliminar marca"
                                                 >

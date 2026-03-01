@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FaImage, FaPlus, FaTrash, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { Card, Button, LoadingSpinner } from '../../components/common';
 import * as featuredImageService from '../../services/featuredImageService';
-import { getProductImage } from '../../utils/imageHelper';
+import { getImageUrl } from '../../utils/imageHelper';
 import { toast } from 'react-toastify';
 
 /**
@@ -171,12 +171,12 @@ const AdminHeroImagesPage = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {images.map((image) => (
-                            <Card key={image._id} hoverable>
+                            <Card key={image.id} hoverable>
                                 <div className="relative group">
                                     {/* Imagen */}
                                     <div className="aspect-video bg-secondary-100 rounded-lg overflow-hidden mb-3">
                                         <img
-                                            src={getProductImage(image.image)}
+                                            src={getImageUrl(image.imageUrl)}
                                             alt="Hero"
                                             className="w-full h-full object-cover"
                                         />
@@ -206,7 +206,7 @@ const AdminHeroImagesPage = () => {
                                             <Button
                                                 variant={image.isActive ? 'outline' : 'primary'}
                                                 size="sm"
-                                                onClick={() => handleToggleActive(image._id, image.isActive)}
+                                                onClick={() => handleToggleActive(image.id, image.isActive)}
                                                 className="flex-1"
                                             >
                                                 {image.isActive ? (
@@ -225,7 +225,7 @@ const AdminHeroImagesPage = () => {
                                             <Button
                                                 variant="danger"
                                                 size="sm"
-                                                onClick={() => handleDelete(image._id)}
+                                                onClick={() => handleDelete(image.id)}
                                             >
                                                 <FaTrash />
                                             </Button>

@@ -1,50 +1,51 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const router = express.Router();
+const { sequelize } = require('../config/database');
 
 /**
- * @desc    Health Check - Verifica estado del servidor y BD
+ * @desc    Health Check - Verifica estado del servidor y base de datos MySQL
  * @route   GET /api/health
  * @access  Public
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
+    const memUsage = process.memoryUsage();
+
     const healthData = {
         status: 'ok',
-        uptime: process.uptime(),
+        uptime: `${Math.floor(process.uptime())}s`,
         timestamp: new Date(),
+        environment: process.env.NODE_ENV || 'development',
         database: {
-            state: mongoose.connection.readyState,
-            status: getDbStatus(mongoose.connection.readyState),
+            dialect: 'mysql',
+            status: 'checking...'
         },
         memory: {
-            used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
-            total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB',
+            used: Math.round(memUsage.heapUsed / 1024 / 1024) + ' MB',
+            total: Math.round(memUsage.heapTotal / 1024 / 1024) + ' MB',
+            rss: Math.round(memUsage.rss / 1024 / 1024) + ' MB'
         }
     };
 
-    // Si la BD no está conectada, retornar 503 Service Unavailable
-    if (mongoose.connection.readyState !== 1) {
+    try {
+        // sequelize.authenticate() ejecuta un SELECT 1+1 para verificar la conexión
+        // Equivalente a comprobar mongoose.connection.readyState === 1
+        await sequelize.authenticate();
+
+        healthData.database.status = 'connected';
+
+        return res.status(200).json(healthData);
+
+    } catch (error) {
+        // MySQL no disponible → 503 Service Unavailable
+        healthData.status = 'degraded';
+        healthData.database.status = 'disconnected';
+        healthData.database.error = error.message;
+
         return res.status(503).json({
             ...healthData,
-            status: 'degraded',
-            message: 'Base de datos no disponible',
+            message: 'Base de datos MySQL no disponible'
         });
     }
-
-    res.status(200).json(healthData);
 });
-
-/**
- * Helper para convertir readyState a texto legible
- */
-function getDbStatus(readyState) {
-    const states = {
-        0: 'disconnected',
-        1: 'connected',
-        2: 'connecting',
-        3: 'disconnecting',
-    };
-    return states[readyState] || 'unknown';
-}
 
 module.exports = router;

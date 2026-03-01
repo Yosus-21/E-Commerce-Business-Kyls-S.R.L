@@ -2,6 +2,7 @@ const { body, param } = require('express-validator');
 
 /**
  * Validadores para Quote
+ * ✅ Migrado de MongoDB a MySQL: isMongoId() → isInt({ min: 1 })
  */
 
 // Validar creación de cotización
@@ -49,8 +50,9 @@ const createQuoteValidator = [
 
 // Validar actualización de estado
 const updateQuoteStatusValidator = [
+    // ✅ MySQL usa ID entero positivo, no ObjectId de MongoDB
     param('id')
-        .isMongoId()
+        .isInt({ min: 1 })
         .withMessage('ID de cotización inválido'),
     body('status')
         .isIn(['Generada', 'Contactado', 'Cerrada'])
@@ -64,8 +66,9 @@ const updateQuoteStatusValidator = [
 
 // Validar obtener cotización por ID
 const getQuoteByIdValidator = [
+    // ✅ MySQL usa ID entero positivo, no ObjectId de MongoDB
     param('id')
-        .isMongoId()
+        .isInt({ min: 1 })
         .withMessage('ID de cotización inválido')
 ];
 

@@ -181,7 +181,7 @@ const AdminCategoriesPage = () => {
                             </thead>
                             <tbody className="divide-y divide-secondary-200">
                                 {categories.map((category) => (
-                                    <tr key={category._id} className="hover:bg-secondary-50 transition-colors">
+                                    <tr key={category.id} className="hover:bg-secondary-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div>
                                                 <div className="font-medium text-secondary-900">{category.name}</div>
@@ -208,14 +208,14 @@ const AdminCategoriesPage = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end space-x-2">
                                                 <button
-                                                    onClick={() => navigate(`/admin/categories/edit/${category._id}`)}
+                                                    onClick={() => navigate(`/admin/categories/edit/${category.id}`)}
                                                     className="p-2 text-primary-700 hover:bg-primary-50 rounded-lg transition-colors"
                                                     title="Editar"
                                                 >
                                                     <FaEdit />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(category._id, category.name)}
+                                                    onClick={() => handleDelete(category.id, category.name)}
                                                     className="p-2 text-danger-700 hover:bg-danger-50 rounded-lg transition-colors"
                                                     title="Eliminar"
                                                 >

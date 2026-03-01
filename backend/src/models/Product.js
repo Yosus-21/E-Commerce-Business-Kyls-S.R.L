@@ -1,135 +1,160 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
 const slugify = require('slugify');
+const { sequelize } = require('../config/database');
 
-// Schema de Producto
-const productSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'El nombre del producto es requerido'],
-        trim: true,
-        maxlength: [200, 'El nombre no puede exceder 200 caracteres']
-    },
-    slug: {
-        type: String,
-        unique: true,
-        lowercase: true
-    },
-    description: {
-        type: String,
-        required: [true, 'La descripción es requerida'],
-        trim: true,
-        maxlength: [2000, 'La descripción no puede exceder 2000 caracteres']
-    },
-    longDescription: {
-        type: String,
-        required: false,
-        trim: true,
-        maxlength: [10000, 'La descripción extendida no puede exceder 10000 caracteres']
-    },
-    price: {
-        type: Number,
-        required: [true, 'El precio es requerido'],
-        min: [0, 'El precio no puede ser negativo']
-    },
-    category: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Category',
-        required: [true, 'La categoría es requerida']
-    },
-    brand: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Brand',
-        required: false
-    },
-    stock: {
-        type: Number,
-        required: [true, 'El stock es requerido'],
-        min: [0, 'El stock no puede ser negativo'],
-        default: 0
-    },
-    images: [{
-        type: String
-    }],
-    specifications: {
-        type: Map,
-        of: String
-    },
-    isFeatured: {
-        type: Boolean,
-        default: false
-    },
-    discountPercentage: {
-        type: Number,
-        default: 0,
-        min: [0, 'El descuento no puede ser negativo'],
-        max: [100, 'El descuento no puede exceder 100%']
-    },
-    isActive: {
-        type: Boolean,
-        default: true
-    },
-    views: {
-        type: Number,
-        default: 0
+class Product extends Model {
+    // ====================================
+    // GETTERS (equivalentes a Virtuals en Mongoose)
+    // ====================================
+
+    /** Retorna true si hay stock disponible */
+    get inStock() {
+        return this.stock > 0;
     }
-}, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
 
-// ====================================
-// ÍNDICES
-// ====================================
-// slug ya tiene unique: true en el schema, no necesitamos índice duplicado
-productSchema.index({ name: 'text' }); // Índice de texto para búsqueda full-text
-productSchema.index({ category: 1 });
-productSchema.index({ brand: 1 });
-productSchema.index({ price: 1 });
-productSchema.index({ isFeatured: 1 });
-productSchema.index({ createdAt: -1 });
-
-// ====================================
-// MIDDLEWARE PRE-VALIDATE
-// ====================================
-// Auto-generar slug desde name si no existe
-productSchema.pre('validate', function (next) {
-    if (this.name && !this.slug) {
-        this.slug = slugify(this.name, {
-            lower: true,
-            strict: true,
-            locale: 'es'
-        });
+    /** Retorna el precio con descuento aplicado */
+    get discountedPrice() {
+        if (this.discountPercentage > 0) {
+            return parseFloat((this.price * (1 - this.discountPercentage / 100)).toFixed(2));
+        }
+        return this.price;
     }
-    next();
-});
+}
 
-// ====================================
-// VIRTUALS
-// ====================================
-// Virtual para verificar si hay stock disponible
-productSchema.virtual('inStock').get(function () {
-    return this.stock > 0;
-});
-
-// Virtual para calcular precio con descuento
-productSchema.virtual('discountedPrice').get(function () {
-    if (this.discountPercentage > 0) {
-        return this.price * (1 - this.discountPercentage / 100);
+Product.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        name: {
+            type: DataTypes.STRING(200),
+            allowNull: false,
+            validate: {
+                notEmpty: { msg: 'El nombre del producto es requerido' },
+                len: { args: [1, 200], msg: 'El nombre no puede exceder 200 caracteres' }
+            }
+        },
+        slug: {
+            type: DataTypes.STRING(220),
+            unique: true,
+            allowNull: true
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: false,
+            validate: {
+                notEmpty: { msg: 'La descripción es requerida' }
+            }
+        },
+        longDescription: {
+            type: DataTypes.TEXT('long'),
+            allowNull: true
+        },
+        price: {
+            type: DataTypes.FLOAT,
+            allowNull: false,
+            validate: {
+                min: { args: [0], msg: 'El precio no puede ser negativo' }
+            }
+        },
+        // categoryId FK → definida en index.js
+        // brandId FK → definida en index.js (nullable)
+        stock: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+            validate: {
+                min: { args: [0], msg: 'El stock no puede ser negativo' }
+            }
+        },
+        /**
+         * Array de rutas de imágenes almacenadas como JSON
+         * Ej: ["/uploads/products/img1.jpg", "/uploads/products/img2.jpg"]
+         */
+        images: {
+            type: DataTypes.JSON,
+            defaultValue: []
+        },
+        /**
+         * Especificaciones técnicas como objeto JSON
+         * Ej: { "RAM": "8GB", "Procesador": "Intel i5" }
+         */
+        specifications: {
+            type: DataTypes.JSON,
+            defaultValue: {}
+        },
+        isFeatured: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
+        discountPercentage: {
+            type: DataTypes.FLOAT,
+            defaultValue: 0,
+            validate: {
+                min: { args: [0], msg: 'El descuento no puede ser negativo' },
+                max: { args: [100], msg: 'El descuento no puede exceder 100%' }
+            }
+        },
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+        views: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0
+        }
+    },
+    {
+        sequelize,
+        modelName: 'Product',
+        tableName: 'Products',
+        timestamps: true,
+        // Incluir getters virtuales en toJSON()
+        getterMethods: {
+            inStock() {
+                return this.stock > 0;
+            },
+            discountedPrice() {
+                if (this.discountPercentage > 0) {
+                    return parseFloat((this.price * (1 - this.discountPercentage / 100)).toFixed(2));
+                }
+                return this.price;
+            }
+        },
+        indexes: [
+            { fields: ['slug'], unique: true },
+            { fields: ['categoryId'] },
+            { fields: ['brandId'] },
+            { fields: ['price'] },
+            { fields: ['isFeatured'] },
+            { fields: ['isActive'] },
+            { fields: ['createdAt'] },
+            // Índice FULLTEXT para búsqueda por nombre (MySQL)
+            {
+                type: 'FULLTEXT',
+                fields: ['name'],
+                name: 'product_name_fulltext'
+            }
+        ]
     }
-    return this.price;
+);
+
+// ====================================
+// HOOK: Auto-generar slug desde name
+// ====================================
+Product.addHook('beforeValidate', async (product) => {
+    if (product.name && !product.slug) {
+        let base = slugify(product.name, { lower: true, strict: true, locale: 'es' });
+        // Garantizar unicidad del slug añadiendo timestamp si es necesario
+        const existing = await Product.findOne({ where: { slug: base } });
+        if (existing) {
+            product.slug = `${base}-${Date.now()}`;
+        } else {
+            product.slug = base;
+        }
+    }
 });
 
-// ====================================
-// MÉTODOS ESTÁTICOS
-// ====================================
-// Encontrar productos por categoría
-productSchema.statics.findByCategory = function (categoryId) {
-    return this.find({
-        category: categoryId,
-        isActive: true
-    }).populate('category', 'name slug');
-};
-
-// Exportar modelo
-module.exports = mongoose.model('Product', productSchema);
+module.exports = Product;

@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Button, LoadingSpinner, Card } from '../../components/common';
 import reportService from '../../services/reportService';
 import * as brandService from '../../services/brandService';
+import { getImageUrl } from '../../utils/imageHelper';
 
 const CatalogPage = () => {
     const [loading, setLoading] = useState(false);
@@ -132,35 +133,39 @@ const CatalogPage = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                            {brands.map((brand) => (
-                                <div key={brand._id} className="bg-white rounded-lg shadow-sm hover:shadow-md p-4 transition-all flex flex-col items-center text-center border border-gray-100">
-                                    <div className="h-16 w-full flex items-center justify-center mb-4">
-                                        {brand.image ? (
-                                            <img
-                                                src={`${(import.meta.env.VITE_API_URL).replace('/api', '')}${brand.image}`}
-                                                alt={brand.name}
-                                                className="max-h-full max-w-full object-contain filter grayscale hover:grayscale-0 transition-all duration-300"
-                                                onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                                            />
-                                        ) : null}
-                                        <div className={`${brand.image ? 'hidden' : 'flex'} w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 items-center justify-center`}>
-                                            <span className="text-xl font-bold text-purple-600">
-                                                {brand.name[0]}
-                                            </span>
+                            {brands.map((brand) => {
+                                const brandId = brand.id || brand._id;
+                                return (
+                                    <div key={brandId} className="bg-white rounded-lg shadow-sm hover:shadow-md p-4 transition-all flex flex-col items-center text-center border border-gray-100">
+                                        <div className="h-16 w-full flex items-center justify-center mb-4">
+                                            {/* ✅ usa brand.logo (campo MySQL) con getImageUrl */}
+                                            {brand.logo ? (
+                                                <img
+                                                    src={getImageUrl(brand.logo)}
+                                                    alt={brand.name}
+                                                    className="max-h-full max-w-full object-contain filter grayscale hover:grayscale-0 transition-all duration-300"
+                                                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                                                />
+                                            ) : null}
+                                            <div className={`${brand.logo ? 'hidden' : 'flex'} w-12 h-12 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 items-center justify-center`}>
+                                                <span className="text-xl font-bold text-purple-600">
+                                                    {brand.name[0]}
+                                                </span>
+                                            </div>
                                         </div>
+                                        <h4 className="font-semibold text-gray-800 mb-3">{brand.name}</h4>
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleDownload('products', brandId, `Catálogo ${brand.name}`)}
+                                            isLoading={loading}
+                                            className="w-full text-xs"
+                                        >
+                                            <FaDownload className="mr-1" /> Descargar
+                                        </Button>
                                     </div>
-                                    <h4 className="font-semibold text-gray-800 mb-3">{brand.name}</h4>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => handleDownload('products', brand._id, `Catálogo ${brand.name}`)}
-                                        isLoading={loading}
-                                        className="w-full text-xs"
-                                    >
-                                        <FaDownload className="mr-1" /> Descargar
-                                    </Button>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </section>

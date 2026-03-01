@@ -1,6 +1,7 @@
 /**
  * Middleware global de manejo de errores
  * Debe ser el ÚLTIMO middleware en app.js
+ * ✅ Adaptado para Sequelize/MySQL (sin errores específicos de Mongoose)
  */
 const errorHandler = (err, req, res, next) => {
     let error = { ...err };
@@ -10,33 +11,37 @@ const errorHandler = (err, req, res, next) => {
     console.error('Error:', err);
 
     // ====================================
-    // ERRORES ESPECÍFICOS DE MONGOOSE
+    // ERRORES DE SEQUELIZE / MYSQL
     // ====================================
 
-    // Error de CastError - ID de MongoDB inválido
-    if (err.name === 'CastError') {
-        const message = 'Recurso no encontrado';
-        error.message = message;
-        error.statusCode = 404;
-    }
-
-    // Error de duplicado (E11000) - Clave única duplicada
-    if (err.code === 11000) {
-        // Extraer el campo duplicado del error
-        const field = Object.keys(err.keyValue)[0];
-        const value = err.keyValue[field];
-        const message = `El ${field} '${value}' ya existe`;
-        error.message = message;
-        error.statusCode = 400;
-    }
-
-    // Error de validación de Mongoose
-    if (err.name === 'ValidationError') {
-        // Extraer todos los mensajes de error
-        const messages = Object.values(err.errors).map(val => val.message);
-        error.message = 'Errores de validación';
+    // Error de validación de Sequelize (campo requerido, unicidad, etc.)
+    if (err.name === 'SequelizeValidationError') {
+        const messages = err.errors.map(e => e.message);
+        error.message = messages[0] || 'Error de validación';
         error.errors = messages;
         error.statusCode = 400;
+    }
+
+    // Error de unicidad de Sequelize (UNIQUE constraint)
+    if (err.name === 'SequelizeUniqueConstraintError') {
+        const field = err.errors?.[0]?.path || 'campo';
+        const value = err.errors?.[0]?.value || '';
+        error.message = `El ${field} '${value}' ya existe`;
+        error.statusCode = 400;
+    }
+
+    // Error de llave foránea de Sequelize (FK constraint)
+    if (err.name === 'SequelizeForeignKeyConstraintError') {
+        error.message = 'Referencia inválida: el registro relacionado no existe';
+        error.statusCode = 400;
+    }
+
+    // Error de base de datos genérico de Sequelize
+    if (err.name === 'SequelizeDatabaseError') {
+        error.message = process.env.NODE_ENV === 'development'
+            ? err.message
+            : 'Error de base de datos';
+        error.statusCode = 500;
     }
 
     // ====================================

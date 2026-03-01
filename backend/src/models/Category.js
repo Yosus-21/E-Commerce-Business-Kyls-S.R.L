@@ -1,72 +1,72 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
 const slugify = require('slugify');
+const { sequelize } = require('../config/database');
 
-// Schema de Categoría
-const categorySchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'El nombre de la categoría es requerido'],
-        unique: true,
-        trim: true,
-        maxlength: [100, 'El nombre no puede exceder 100 caracteres']
+class Category extends Model { }
+
+Category.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        name: {
+            type: DataTypes.STRING(100),
+            allowNull: false,
+            unique: { msg: 'Ya existe una categoría con ese nombre' },
+            validate: {
+                notEmpty: { msg: 'El nombre de la categoría es requerido' },
+                len: { args: [1, 100], msg: 'El nombre no puede exceder 100 caracteres' }
+            }
+        },
+        slug: {
+            type: DataTypes.STRING(120),
+            unique: true,
+            allowNull: true
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+            validate: {
+                len: { args: [0, 500], msg: 'La descripción no puede exceder 500 caracteres' }
+            }
+        },
+        // parentId FK → auto-referencia definida en index.js
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        }
     },
-    slug: {
-        type: String,
-        unique: true,
-        lowercase: true,
-        trim: true
-    },
-    description: {
-        type: String,
-        trim: true,
-        maxlength: [500, 'La descripción no puede exceder 500 caracteres']
-    },
-    parent: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Category',
-        default: null
-    },
-    isActive: {
-        type: Boolean,
-        default: true
+    {
+        sequelize,
+        modelName: 'Category',
+        tableName: 'Categories',
+        timestamps: true,
+        indexes: [
+            { fields: ['slug'], unique: true },
+            { fields: ['isActive'] }
+        ]
     }
-}, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
+);
 
 // ====================================
-// ÍNDICES
+// HOOK: Auto-generar slug desde name con verificación de unicidad
 // ====================================
-// slug ya tiene unique: true en el schema
-// name ya tiene unique: true en el schema, no necesitamos índice adicional
-
-// ====================================
-// MIDDLEWARE PRE-VALIDATE
-// ====================================
-// Auto-generar slug desde name si no existe
-categorySchema.pre('validate', function (next) {
-    if (this.name && !this.slug) {
-        this.slug = slugify(this.name, {
+Category.addHook('beforeValidate', async (category) => {
+    if (category.name && !category.slug) {
+        let base = slugify(category.name, {
             lower: true,
             strict: true,
             locale: 'es'
         });
+        const existing = await Category.findOne({ where: { slug: base } });
+        if (existing && existing.id !== category.id) {
+            category.slug = `${base}-${Date.now()}`;
+        } else {
+            category.slug = base;
+        }
     }
-    next();
 });
 
-// ====================================
-// VIRTUALS
-// ====================================
-// Virtual para contar productos de esta categoría
-categorySchema.virtual('productCount', {
-    ref: 'Product',
-    localField: '_id',
-    foreignField: 'category',
-    count: true
-});
-
-// Exportar modelo
-module.exports = mongoose.model('Category', categorySchema);
+module.exports = Category;

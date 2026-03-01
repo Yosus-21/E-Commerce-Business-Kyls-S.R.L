@@ -1,87 +1,49 @@
-const mongoose = require('mongoose');
+const { Sequelize } = require('sequelize');
 
-/**
- * 🔐 Conexión Robusta a MongoDB con Auto-Reconexión
- * Previene el "zombie mode" y garantiza estabilidad
- */
+// ====================================
+// INSTANCIAR SEQUELIZE CON MYSQL
+// ====================================
+const sequelize = new Sequelize(
+    process.env.DB_NAME,
+    process.env.DB_USER,
+    process.env.DB_PASSWORD,
+    {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 3306,
+        dialect: 'mysql',
+        logging: process.env.NODE_ENV === 'development' ? console.log : false,
+        pool: {
+            max: 10,
+            min: 0,
+            acquire: 30000,
+            idle: 10000
+        },
+        define: {
+            // Usar timestamps automáticos (createdAt, updatedAt) en todos los modelos
+            timestamps: true,
+            // Evitar que Sequelize pluralice los nombres de tablas de forma extraña
+            underscored: false
+        }
+    }
+);
+
+// ====================================
+// FUNCIÓN DE CONEXIÓN
+// ====================================
 const connectDB = async () => {
-  try {
-    // ⚙️ Opciones de conexión optimizadas para Windows
-    const options = {
-      serverSelectionTimeoutMS: 30000,   // 30s timeout (antes 5s - muy corto para Windows)
-      socketTimeoutMS: 45000,             // 45s socket timeout (keep-alive)
-      maxPoolSize: 50,                    // 50 conexiones máximo (antes 10 - se agotaba)
-      minPoolSize: 10,                    // 10 conexiones mínimo (antes 2)
-      retryWrites: true,                  // Reintentar escrituras fallidas
-      w: 'majority',                      // Write concern para mayor consistencia
-      family: 4,                          // Forzar IPv4 (evita delays en resolución localhost)
-    };
+    try {
+        await sequelize.authenticate();
+        console.log('✅ MySQL conectado exitosamente con Sequelize');
 
-    const conn = await mongoose.connect(process.env.MONGO_URI, options);
-
-    console.log('='.repeat(60));
-    console.log('✅ MongoDB conectado exitosamente');
-    console.log(`📡 Host: ${conn.connection.host}`);
-    console.log(`📊 Base de datos: ${conn.connection.name}`);
-    console.log(`🔌 Estado: ${conn.connection.readyState} (1=conectado)`);
-    console.log('='.repeat(60));
-
-    // ====================================
-    // 🎯 EVENT LISTENERS - Monitoreo de Conexión
-    // ====================================
-
-    // 🟢 Conexión exitosa
-    mongoose.connection.on('connected', () => {
-      console.log('🟢 MongoDB: Conexión establecida');
-    });
-
-    // 🔴 Desconexión detectada
-    mongoose.connection.on('disconnected', () => {
-      console.warn('🔴 MongoDB: Desconectado. Mongoose intentará reconectar automáticamente...');
-    });
-
-    // 🟡 Reconexión exitosa
-    mongoose.connection.on('reconnected', () => {
-      console.log('🟡 MongoDB: Reconectado exitosamente');
-    });
-
-    // ❌ Error en la conexión
-    mongoose.connection.on('error', (err) => {
-      console.error('❌ MongoDB: Error de conexión:', err.message);
-      // No hacer process.exit() aquí para permitir reconexión automática
-    });
-
-    // 🔵 Reconectando
-    mongoose.connection.on('reconnectFailed', () => {
-      console.error('🔵 MongoDB: Falló la reconexión. Reinicia el servidor manualmente.');
-    });
-
-    // 🚨 Manejar cierre graceful del proceso
-    process.on('SIGINT', async () => {
-      try {
-        await mongoose.connection.close();
-        console.log('👋 MongoDB: Conexión cerrada por terminación de la app');
-        process.exit(0);
-      } catch (err) {
-        console.error('Error al cerrar conexión MongoDB:', err);
+        // En modo desarrollo, sincronizar modelos (alter: true = actualizar columnas sin borrar datos)
+        // Los modelos se sincronizan desde src/models/index.js
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('🔄 Sincronizando modelos con MySQL...');
+        }
+    } catch (error) {
+        console.error('❌ Error al conectar con MySQL:', error.message);
         process.exit(1);
-      }
-    });
-
-  } catch (error) {
-    console.error('='.repeat(60));
-    console.error('❌ ERROR CRÍTICO: No se pudo conectar a MongoDB');
-    console.error('📝 Mensaje:', error.message);
-    console.error('🔍 Verifica:');
-    console.error('   1. Que MongoDB Atlas esté activo');
-    console.error('   2. Que MONGO_URI en .env sea correcta');
-    console.error('   3. Que tu IP esté en la whitelist de MongoDB Atlas');
-    console.error('   4. Que tengas conexión a internet');
-    console.error('='.repeat(60));
-
-    // Salir solo en el primer intento fallido
-    process.exit(1);
-  }
+    }
 };
 
-module.exports = connectDB;
+module.exports = { sequelize, connectDB };

@@ -22,8 +22,8 @@ const productSchema = yup.object().shape({
         .string()
         .required('La descripción es obligatoria')
         .min(10, 'La descripción debe tener al menos 10 caracteres'),
-    brand: yup
-        .string(),
+    brandId: yup
+        .string(),                          // Opcional (Sin marca)
     price: yup
         .number()
         .typeError('El precio debe ser un número')
@@ -35,7 +35,7 @@ const productSchema = yup.object().shape({
         .required('El stock es obligatorio')
         .integer('El stock debe ser un número entero')
         .min(0, 'El stock no puede ser negativo'),
-    category: yup
+    categoryId: yup
         .string()
         .required('La categoría es obligatoria'),
 });
@@ -98,7 +98,7 @@ const AdminProductFormPage = () => {
                     // Obtener producto (necesitamos crear una función getProduct en productService)
                     const productsResponse = await productService.getProducts();
                     const product = (productsResponse.data?.products || productsResponse.data || [])
-                        .find(p => p._id === id);
+                        .find(p => p.id == id || p._id === id);
 
                     if (!product) {
                         toast.error('Producto no encontrado', {
@@ -108,14 +108,14 @@ const AdminProductFormPage = () => {
                         return;
                     }
 
-                    // Rellenar formulario
+                    // Rellenar formulario con IDs numéricos de MySQL
                     setValue('name', product.name);
                     setValue('description', product.description);
                     setValue('longDescription', product.longDescription || '');
-                    setValue('brand', product.brand?._id || product.brand || '');
+                    setValue('brandId', product.brandId || product.brand?.id || '');
                     setValue('price', product.price);
                     setValue('stock', product.stock);
-                    setValue('category', product.category?._id || product.category);
+                    setValue('categoryId', product.categoryId || product.category?.id || '');
                     setValue('isFeatured', product.isFeatured || false);
                     setValue('discountPercentage', product.discountPercentage || 0);
 
@@ -159,12 +159,13 @@ const AdminProductFormPage = () => {
             if (data.longDescription) {
                 formData.append('longDescription', data.longDescription);
             }
-            if (data.brand) {
-                formData.append('brand', data.brand);
+            // ✅ Enviar categoryId y brandId (nombres que espera el backend Sequelize)
+            formData.append('categoryId', data.categoryId);
+            if (data.brandId) {
+                formData.append('brandId', data.brandId);
             }
             formData.append('price', data.price);
             formData.append('stock', data.stock);
-            formData.append('category', data.category);
             formData.append('isFeatured', data.isFeatured || false);
             formData.append('discountPercentage', data.discountPercentage || 0);
 
@@ -289,19 +290,19 @@ const AdminProductFormPage = () => {
                                     Marca (Opcional)
                                 </label>
                                 <select
-                                    {...register('brand')}
+                                    {...register('brandId')}
                                     className="w-full px-4 py-2 border border-secondary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 >
                                     <option value="">Sin marca</option>
                                     {brands.map((brand) => (
-                                        <option key={brand._id} value={brand._id}>
+                                        <option key={brand.id || brand._id} value={brand.id || brand._id}>
                                             {brand.name}
                                         </option>
                                     ))}
                                 </select>
-                                {errors.brand && (
+                                {errors.brandId && (
                                     <p className="mt-1 text-sm text-danger-600">
-                                        {errors.brand.message}
+                                        {errors.brandId.message}
                                     </p>
                                 )}
                             </div>
@@ -411,11 +412,11 @@ const AdminProductFormPage = () => {
                                     Categoría
                                 </label>
                                 <select
-                                    {...register('category')}
+                                    {...register('categoryId')}
                                     className={`
                     w-full px-4 py-2 border rounded-lg
                     focus:outline-none focus:ring-2 focus:ring-primary-500
-                    ${errors.category
+                    ${errors.categoryId
                                             ? 'border-danger-500 focus:ring-danger-500'
                                             : 'border-secondary-300'
                                         }
@@ -423,14 +424,14 @@ const AdminProductFormPage = () => {
                                 >
                                     <option value="">Selecciona una categoría</option>
                                     {categories.map((category) => (
-                                        <option key={category._id} value={category._id}>
+                                        <option key={category.id || category._id} value={category.id || category._id}>
                                             {category.name}
                                         </option>
                                     ))}
                                 </select>
-                                {errors.category && (
+                                {errors.categoryId && (
                                     <p className="mt-1 text-sm text-danger-600">
-                                        {errors.category.message}
+                                        {errors.categoryId.message}
                                     </p>
                                 )}
                             </div>

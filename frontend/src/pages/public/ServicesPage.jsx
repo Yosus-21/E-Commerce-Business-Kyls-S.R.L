@@ -152,14 +152,14 @@ const ServicesPage = () => {
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             {filteredServices.map((service) => (
-                                <Card key={service._id} hoverable className="flex flex-col overflow-hidden group">
+                                <Card key={service.id} hoverable className="flex flex-col overflow-hidden group">
 
                                     {/* Link wrapper para toda la card excepto botones */}
                                     <div className="relative">
 
                                         {/* Imagen */}
                                         {service.image ? (
-                                            <Link to={`/services/${service._id}`} className="block overflow-hidden cursor-pointer">
+                                            <Link to={`/services/${service.id}`} className="block overflow-hidden cursor-pointer">
                                                 <img
                                                     src={`${import.meta.env.VITE_API_URL}${service.image}`}
                                                     alt={service.title}
@@ -167,14 +167,14 @@ const ServicesPage = () => {
                                                 />
                                             </Link>
                                         ) : (
-                                            <Link to={`/services/${service._id}`} className="block w-full h-56 bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center cursor-pointer">
+                                            <Link to={`/services/${service.id}`} className="block w-full h-56 bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center cursor-pointer">
                                                 <FaConciergeBell className="text-6xl text-primary-600" />
                                             </Link>
                                         )}
 
                                         {/* Contenido */}
                                         <div className="p-6 flex-1 flex flex-col">
-                                            <Link to={`/services/${service._id}`} className="hover:text-primary-600 transition-colors">
+                                            <Link to={`/services/${service.id}`} className="hover:text-primary-600 transition-colors">
                                                 <h3 className="text-2xl font-bold text-secondary-900 mb-3">
                                                     {service.title}
                                                 </h3>
@@ -209,7 +209,7 @@ const ServicesPage = () => {
 
                                             <div className="grid grid-cols-2 gap-3 mt-auto">
                                                 <Link
-                                                    to={`/services/${service._id}`}
+                                                    to={`/services/${service.id}`}
                                                     className="col-span-1 border border-primary-600 text-primary-600 hover:bg-primary-50 font-semibold py-2 px-4 rounded-lg transition-colors text-center text-sm flex items-center justify-center"
                                                 >
                                                     Ver Detalles

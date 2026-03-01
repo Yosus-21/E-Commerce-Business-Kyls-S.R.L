@@ -1,76 +1,98 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
 const slugify = require('slugify');
+const { sequelize } = require('../config/database');
 
-// Schema de Servicio
-const serviceSchema = new mongoose.Schema({
-    title: {
-        type: String,
-        required: [true, 'El título del servicio es requerido'],
-        trim: true,
-        maxlength: [200, 'El título no puede exceder 200 caracteres']
+class Service extends Model { }
+
+Service.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        title: {
+            type: DataTypes.STRING(200),
+            allowNull: false,
+            validate: {
+                notEmpty: { msg: 'El título del servicio es requerido' },
+                len: { args: [1, 200], msg: 'El título no puede exceder 200 caracteres' }
+            }
+        },
+        slug: {
+            type: DataTypes.STRING(220),
+            unique: true,
+            allowNull: true
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        longDescription: {
+            type: DataTypes.TEXT('long'),
+            allowNull: true
+        },
+        image: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: null
+        },
+        price: {
+            type: DataTypes.STRING(50),
+            allowNull: true
+        },
+        /**
+         * Lista de características del servicio almacenadas como JSON
+         * Ej: ["Instalación incluida", "Garantía 1 año"]
+         */
+        features: {
+            type: DataTypes.JSON,
+            defaultValue: []
+        },
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+        views: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0
+        }
     },
-    slug: {
-        type: String,
-        unique: true,
-        lowercase: true
-    },
-    description: {
-        type: String,
-        trim: true,
-        maxlength: [3000, 'La descripción no puede exceder 3000 caracteres']
-    },
-    longDescription: {
-        type: String,
-        required: false,
-        trim: true,
-        maxlength: [10000, 'La descripción extendida no puede exceder 10000 caracteres']
-    },
-    image: {
-        type: String,
-        default: null
-    },
-    price: {
-        type: String,
-        trim: true,
-        maxlength: [50, 'El precio no puede exceder 50 caracteres']
-    },
-    features: [{
-        type: String,
-        trim: true
-    }],
-    isActive: {
-        type: Boolean,
-        default: true
-    },
-    views: {
-        type: Number,
-        default: 0
+    {
+        sequelize,
+        modelName: 'Service',
+        tableName: 'Services',
+        timestamps: true,
+        indexes: [
+            { fields: ['slug'], unique: true },
+            { fields: ['isActive'] },
+            { fields: ['createdAt'] }
+        ]
     }
-}, {
-    timestamps: true
-});
+);
 
 // ====================================
-// ÍNDICES
+// HOOK: Auto-generar slug desde title y garantizar unicidad
 // ====================================
-serviceSchema.index({ slug: 1 });
-serviceSchema.index({ isActive: 1 });
-serviceSchema.index({ createdAt: -1 });
-
-// ====================================
-// MIDDLEWARE PRE-VALIDATE
-// ====================================
-// Auto-generar slug desde title si no existe
-serviceSchema.pre('validate', function (next) {
-    if (this.title && !this.slug) {
-        this.slug = slugify(this.title, {
+Service.addHook('beforeValidate', async (service) => {
+    // Si se acaba de asignar un title pero no un slug
+    if (service.title && !service.slug) {
+        let baseSlug = slugify(service.title, {
             lower: true,
             strict: true,
             locale: 'es'
         });
+
+        // Buscar si el slug ya existe (incluyendo soft-deleted)
+        const existing = await sequelize.models.Service.findOne({ where: { slug: baseSlug } });
+
+        // Si existe un servicio con ese slug, y NO es el mismo servicio (ej: update)
+        if (existing && existing.id !== service.id) {
+            service.slug = `${baseSlug}-${Date.now()}`;
+        } else {
+            service.slug = baseSlug;
+        }
     }
-    next();
 });
 
-// Exportar modelo
-module.exports = mongoose.model('Service', serviceSchema);
+module.exports = Service;

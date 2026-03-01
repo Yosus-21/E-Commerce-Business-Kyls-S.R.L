@@ -207,7 +207,7 @@ const AdminPartnersPage = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                         {partners.map((partner) => (
                             <div
-                                key={partner._id}
+                                key={partner.id}
                                 className="relative group bg-white border-2 border-gray-200 rounded-lg overflow-hidden hover:border-purple-500 hover:shadow-lg transition-all duration-300"
                             >
                                 {/* Logo */}
@@ -231,7 +231,7 @@ const AdminPartnersPage = () => {
 
                                 {/* Botón Eliminar */}
                                 <button
-                                    onClick={() => handleDelete(partner._id, partner.name)}
+                                    onClick={() => handleDelete(partner.id, partner.name)}
                                     className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
                                     title="Eliminar"
                                 >

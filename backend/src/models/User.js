@@ -1,158 +1,148 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { sequelize } = require('../config/database');
 
-// Schema de direcciones (subdocumento)
-const addressSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'El nombre de la dirección es requerido'],
-        trim: true
-    },
-    street: {
-        type: String,
-        required: [true, 'La calle es requerida'],
-        trim: true
-    },
-    city: {
-        type: String,
-        required: [true, 'La ciudad es requerida'],
-        trim: true
-    },
-    state: {
-        type: String,
-        required: [true, 'El departamento/estado es requerido'],
-        trim: true
-    },
-    zipCode: {
-        type: String,
-        trim: true
-    },
-    phone: {
-        type: String,
-        required: [true, 'El teléfono de contacto es requerido'],
-        trim: true
-    },
-    isDefault: {
-        type: Boolean,
-        default: false
+class User extends Model {
+    // ====================================
+    // MÉTODOS DE INSTANCIA
+    // ====================================
+
+    /** Comparar password ingresado con el hasheado en BD */
+    async matchPassword(enteredPassword) {
+        return await bcrypt.compare(enteredPassword, this.password);
     }
-});
 
-// Schema principal de Usuario
-const userSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'El nombre es requerido'],
-        trim: true,
-        maxlength: [100, 'El nombre no puede exceder 100 caracteres']
-    },
-    email: {
-        type: String,
-        required: [true, 'El email es requerido'],
-        unique: true,
-        lowercase: true,
-        trim: true,
-        match: [
-            /^\S+@\S+\.\S+$/,
-            'Por favor ingrese un email válido'
-        ]
-    },
-    password: {
-        type: String,
-        required: [true, 'La contraseña es requerida'],
-        minlength: [6, 'La contraseña debe tener al menos 6 caracteres'],
-        select: false // No devolver password en queries por defecto
-    },
-    phone: {
-        type: String,
-        trim: true,
-        match: [
-            /^[0-9]{8,15}$/,
-            'Por favor ingrese un número de teléfono válido (8-15 dígitos)'
-        ]
-    },
-    role: {
-        type: String,
-        enum: {
-            values: ['user', 'admin'],
-            message: 'El rol debe ser user o admin'
+    /** Generar y firmar JWT */
+    getSignedJwtToken() {
+        return jwt.sign(
+            { id: this.id, role: this.role },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRE }
+        );
+    }
+
+    /** Generar token de reset de contraseña (retorna token en texto plano) */
+    getResetPasswordToken() {
+        // Generar token aleatorio
+        const resetToken = crypto.randomBytes(20).toString('hex');
+
+        // Hashear token y guardarlo en la instancia
+        this.resetPasswordToken = crypto
+            .createHash('sha256')
+            .update(resetToken)
+            .digest('hex');
+
+        // Expiración en 10 minutos
+        this.resetPasswordExpire = new Date(Date.now() + 10 * 60 * 1000);
+
+        // Retornar token sin hashear (para enviarlo por email)
+        return resetToken;
+    }
+}
+
+User.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
         },
-        default: 'user'
+        name: {
+            type: DataTypes.STRING(100),
+            allowNull: false,
+            validate: {
+                notEmpty: { msg: 'El nombre es requerido' },
+                len: { args: [1, 100], msg: 'El nombre no puede exceder 100 caracteres' }
+            }
+        },
+        email: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            unique: { msg: 'El email ya está registrado' },
+            validate: {
+                isEmail: { msg: 'Por favor ingrese un email válido' }
+            },
+            set(value) {
+                this.setDataValue('email', value ? value.toLowerCase().trim() : value);
+            }
+        },
+        password: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            validate: {
+                len: { args: [6, 255], msg: 'La contraseña debe tener al menos 6 caracteres' }
+            }
+        },
+        phone: {
+            type: DataTypes.STRING(15),
+            allowNull: true,
+            validate: {
+                is: {
+                    args: /^[0-9]{8,15}$/,
+                    msg: 'Por favor ingrese un número de teléfono válido (8-15 dígitos)'
+                }
+            }
+        },
+        role: {
+            type: DataTypes.ENUM('user', 'admin'),
+            defaultValue: 'user',
+            validate: {
+                isIn: { args: [['user', 'admin']], msg: 'El rol debe ser user o admin' }
+            }
+        },
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        },
+        resetPasswordToken: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        resetPasswordExpire: {
+            type: DataTypes.DATE,
+            allowNull: true
+        }
     },
-    addresses: [addressSchema],
-    isActive: {
-        type: Boolean,
-        default: true
-    },
-    resetPasswordToken: String,
-    resetPasswordExpire: Date
-}, {
-    timestamps: true
-});
-
-// ====================================
-// ÍNDICES
-// ====================================
-// email ya tiene unique: true en el schema, no necesitamos índice duplicado
-userSchema.index({ role: 1 });
-
-// ====================================
-// MIDDLEWARE PRE-SAVE
-// ====================================
-// Hashear password antes de guardar
-userSchema.pre('save', async function (next) {
-    // Solo hashear si el password fue modificado
-    if (!this.isModified('password')) {
-        return next();
+    {
+        sequelize,
+        modelName: 'User',
+        tableName: 'Users',
+        timestamps: true,
+        defaultScope: {
+            // Por defecto excluir password de todas las queries
+            attributes: { exclude: ['password'] }
+        },
+        scopes: {
+            // Scope para login: incluye el password explicitando TODOS los campos.
+            // NOTA: attributes: { include: ['password'] } NO funciona para revertir
+            // un exclude del defaultScope — hay que listar los campos completos.
+            withPassword: {
+                attributes: [
+                    'id', 'name', 'email', 'password', 'phone',
+                    'role', 'isActive', 'resetPasswordToken',
+                    'resetPasswordExpire', 'createdAt', 'updatedAt'
+                ]
+            }
+        },
+        indexes: [
+            { fields: ['email'], unique: true },
+            { fields: ['role'] }
+        ]
     }
+);
 
-    try {
-        // Generar salt y hashear password
+// ====================================
+// HOOKS
+// ====================================
+
+/** Hashear password antes de crear o actualizar si fue modificado */
+User.addHook('beforeSave', async (user) => {
+    if (user.changed('password') && user.password) {
         const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (error) {
-        next(error);
+        user.password = await bcrypt.hash(user.password, salt);
     }
 });
 
-// ====================================
-// MÉTODOS DE INSTANCIA
-// ====================================
-
-// Comparar password ingresado con el hasheado
-userSchema.methods.matchPassword = async function (enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
-};
-
-// Generar y firmar JWT
-userSchema.methods.getSignedJwtToken = function () {
-    return jwt.sign(
-        { id: this._id, role: this.role },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE }
-    );
-};
-
-// Generar token de reset de contraseña
-userSchema.methods.getResetPasswordToken = function () {
-    // Generar token aleatorio
-    const resetToken = crypto.randomBytes(20).toString('hex');
-
-    // Hashear token y guardarlo
-    this.resetPasswordToken = crypto
-        .createHash('sha256')
-        .update(resetToken)
-        .digest('hex');
-
-    // Establecer tiempo de expiración (10 minutos)
-    this.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
-
-    // Retornar token original (sin hashear) para enviarlo por email
-    return resetToken;
-};
-
-// Exportar modelo
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;

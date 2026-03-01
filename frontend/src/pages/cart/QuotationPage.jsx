@@ -76,10 +76,18 @@ const QuotationPage = () => {
     }, [cart.items.length, navigate]);
 
     const onSubmit = async (data) => {
+        // Validación local antes de llamar al backend
+        if (!cart.items || cart.items.length === 0) {
+            toast.error('El carrito está vacío. Agrega productos antes de generar una cotización.', {
+                position: 'bottom-right',
+            });
+            navigate('/products');
+            return;
+        }
+
         try {
             setIsLoading(true);
 
-            // Preparar datos del cliente
             const customerData = {
                 name: data.name,
                 email: data.email,
@@ -87,33 +95,40 @@ const QuotationPage = () => {
                 company: data.company || undefined
             };
 
-            // Generar cotización
-            const response = await quoteService.generateQuote(customerData);
+            // PASO 1: POST /api/quotes → crea Quote + QuoteItems
+            // Si el backend responde 400 (ej: carrito vacío), axios lanza error → cae en catch
+            const quoteResponse = await quoteService.generateQuote(customerData);
 
-            // Crear blob del PDF y abrirlo en nueva pestaña
-            const blob = new Blob([response.data], { type: 'application/pdf' });
-            const url = window.URL.createObjectURL(blob);
+            // quoteService devuelve response.data → { success, data: { id, quoteNumber }, message }
+            const quoteData = quoteResponse?.data ?? quoteResponse;
+            const quoteId = quoteData?.id;
+            const quoteNumber = quoteData?.quoteNumber ?? '';
 
-            // Abrir PDF en nueva pestaña
-            window.open(url, '_blank');
+            if (!quoteId) {
+                throw new Error('No se recibió el ID de la cotización del servidor');
+            }
 
-            // Limpiar carrito
+            toast.info('Cotización creada. Descargando PDF...', { position: 'bottom-right', autoClose: 2000 });
+
+            // PASO 2: GET /api/quotes/:id/pdf → descarga el blob del PDF
+            await quoteService.downloadQuotePDF(quoteId, quoteNumber);
+
+            // ✅ PASO 3: Limpiar el carrito
             await clearCart();
 
-            toast.success('✅ Cotización generada exitosamente', {
+            toast.success('✅ Cotización generada y descargada exitosamente', {
                 position: 'bottom-right',
             });
 
-            // Redirigir al inicio
-            setTimeout(() => {
-                navigate('/');
-            }, 1500);
+            setTimeout(() => navigate('/'), 1500);
 
         } catch (error) {
             console.error('Error al generar cotización:', error);
-            toast.error(error.response?.data?.message || 'Error al generar cotización', {
-                position: 'bottom-right',
-            });
+            const msg = error.response?.data?.message
+                || error.response?.data?.error
+                || error.message
+                || 'Error al generar cotización';
+            toast.error(msg, { position: 'bottom-right' });
         } finally {
             setIsLoading(false);
         }
@@ -259,17 +274,17 @@ const QuotationPage = () => {
                                 {/* Items */}
                                 <div className="space-y-3 mb-4">
                                     {cart.items.map((item) => (
-                                        <div key={item._id} className="flex justify-between text-sm">
+                                        <div key={item.id} className="flex justify-between text-sm">
                                             <div className="flex-1">
                                                 <span className="text-secondary-700">
-                                                    {item.product?.name || 'Producto'}
+                                                    {item.Product?.name || item.product?.name || 'Producto'}
                                                 </span>
                                                 <span className="text-secondary-500 ml-2">
                                                     x{item.quantity}
                                                 </span>
                                             </div>
                                             <span className="font-medium text-secondary-900">
-                                                Bs {(item.price * item.quantity).toFixed(2)}
+                                                Bs {(Number(item.price) * item.quantity).toFixed(2)}
                                             </span>
                                         </div>
                                     ))}

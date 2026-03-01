@@ -27,7 +27,7 @@ const reportService = {
         let filename = `catalogo-${type}.pdf`;
         if (contentDisposition) {
             const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-            if (filenameMatch.length === 2) filename = filenameMatch[1];
+            if (filenameMatch && filenameMatch.length === 2) filename = filenameMatch[1];
         }
 
         link.setAttribute('download', filename);
@@ -37,6 +37,18 @@ const reportService = {
         window.URL.revokeObjectURL(downloadUrl);
 
         return true;
+    },
+
+    /**
+     * Obtener métricas completas del dashboard admin
+     * @route GET /api/reports/dashboard
+     * @returns {Promise<Object>} { inventory, users, quotes, monthly, quoteTrend,
+     *                              topProducts, categoryDistribution, topClients,
+     *                              topViewedProducts, lowStockProducts }
+     */
+    getDashboardData: async () => {
+        const response = await API.get('/reports/dashboard');
+        return response.data;
     }
 };
 

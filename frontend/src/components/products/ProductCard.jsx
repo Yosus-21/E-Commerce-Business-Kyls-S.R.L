@@ -28,7 +28,7 @@ const ProductCard = ({ product }) => {
     const handleAddToCart = async () => {
         try {
             setLoading(true);
-            await addItem(product._id, 1);
+            await addItem(product.id, 1);
             toast.success(`${product.name} agregado al carrito`, {
                 position: 'bottom-right',
                 autoClose: 2000,
@@ -59,7 +59,7 @@ const ProductCard = ({ product }) => {
         >
             {/* Imagen Product */}
             <div className="relative aspect-[4/3] overflow-hidden bg-gray-100 group">
-                <Link to={`/product/${product._id}`} className="block w-full h-full">
+                <Link to={`/product/${product.id}`} className="block w-full h-full">
                     <img
                         src={productImage}
                         alt={product.name}
@@ -110,7 +110,7 @@ const ProductCard = ({ product }) => {
             {/* Contenido */}
             <div className="p-5 flex flex-col flex-grow">
                 {/* Nombre del producto */}
-                <Link to={`/product/${product._id}`}>
+                <Link to={`/product/${product.id}`}>
                     <h3
                         className="text-lg font-semibold text-slate-800 mb-2 line-clamp-2 min-h-[3.5rem] hover:text-purple-600 transition-colors cursor-pointer"
                         title={product.name}

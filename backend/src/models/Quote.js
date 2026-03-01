@@ -1,169 +1,129 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-// Schema de items de cotización (subdocumento embebido)
-const quoteItemSchema = new mongoose.Schema({
-    product: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product'
-    },
-    name: {
-        type: String,
-        required: true
-    },
-    price: {
-        type: Number,
-        required: true,
-        min: 0
-    },
-    quantity: {
-        type: Number,
-        required: true,
-        min: 1
-    },
-    subtotal: {
-        type: Number,
-        required: true,
-        min: 0
-    },
-    image: {
-        type: String
+class Quote extends Model {
+    // ====================================
+    // GETTERS (equivalentes a Virtuals en Mongoose)
+    // ====================================
+
+    /** Retorna true si la cotización ha expirado */
+    get isExpired() {
+        return this.expiresAt < new Date();
     }
-}, {
-    _id: false
-});
 
-// Schema de datos del cliente (subdocumento embebido)
-const customerDataSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true
-    },
-    email: {
-        type: String,
-        required: true
-    },
-    phone: {
-        type: String,
-        required: true
-    },
-    company: {
-        type: String
+    /** Retorna cuántos días quedan hasta que expire */
+    get daysRemaining() {
+        const now = new Date();
+        const diff = this.expiresAt - now;
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        return days > 0 ? days : 0;
     }
-}, {
-    _id: false
-});
 
-// Schema principal de cotización
-const quoteSchema = new mongoose.Schema({
-    quoteNumber: {
-        type: String,
-        required: true,
-        unique: true,
-        index: true
-        // Formato: QT-YYYYMMDD-XXX
-    },
-    user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-        index: true
-    },
-    customerData: {
-        type: customerDataSchema,
-        required: true
-    },
-    items: {
-        type: [quoteItemSchema],
-        required: true,
-        validate: {
-            validator: function (items) {
-                return items && items.length > 0;
+    // ====================================
+    // MÉTODO ESTÁTICO
+    // ====================================
+    /** Genera un número único de cotización con formato QT-YYYYMMDD-XXX */
+    static async generateQuoteNumber() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        const datePrefix = `QT-${year}${month}${day}`;
+
+        // Buscar la última cotización del día usando LIKE
+        const { Op } = require('sequelize');
+        const lastQuote = await Quote.findOne({
+            where: {
+                quoteNumber: { [Op.like]: `${datePrefix}%` }
             },
-            message: 'La cotización debe tener al menos un producto'
+            order: [['quoteNumber', 'DESC']]
+        });
+
+        let sequence = 1;
+        if (lastQuote) {
+            const parts = lastQuote.quoteNumber.split('-');
+            const lastSeq = parseInt(parts[2]);
+            sequence = lastSeq + 1;
+        }
+
+        return `${datePrefix}-${sequence.toString().padStart(3, '0')}`;
+    }
+}
+
+Quote.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        quoteNumber: {
+            type: DataTypes.STRING(30),
+            allowNull: false,
+            unique: true
+            // Formato: QT-YYYYMMDD-XXX
+        },
+        // userId FK → definida en index.js
+        /**
+         * Snapshot de datos del cliente al momento de la cotización
+         * { name, email, phone, company }
+         */
+        customerData: {
+            type: DataTypes.JSON,
+            allowNull: false
+        },
+        totalAmount: {
+            type: DataTypes.FLOAT,
+            allowNull: false,
+            validate: {
+                min: { args: [0], msg: 'El monto total no puede ser negativo' }
+            }
+        },
+        pdfPath: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        status: {
+            type: DataTypes.ENUM('Generada', 'Contactado', 'Cerrada'),
+            defaultValue: 'Generada'
+        },
+        expiresAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            defaultValue: () => {
+                // 30 días desde la creación
+                return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            }
+        },
+        notes: {
+            type: DataTypes.STRING(500),
+            allowNull: true
         }
     },
-    totalAmount: {
-        type: Number,
-        required: true,
-        min: 0
-    },
-    pdfPath: {
-        type: String
-    },
-    status: {
-        type: String,
-        enum: ['Generada', 'Contactado', 'Cerrada'],
-        default: 'Generada',
-        index: true
-    },
-    expiresAt: {
-        type: Date,
-        default: function () {
-            // 30 días desde la creación
-            return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        }
-    },
-    notes: {
-        type: String,
-        maxlength: 500
+    {
+        sequelize,
+        modelName: 'Quote',
+        tableName: 'Quotes',
+        timestamps: true,
+        getterMethods: {
+            isExpired() {
+                return this.expiresAt < new Date();
+            },
+            daysRemaining() {
+                const now = new Date();
+                const diff = this.expiresAt - now;
+                const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+                return days > 0 ? days : 0;
+            }
+        },
+        indexes: [
+            { fields: ['quoteNumber'], unique: true },
+            { fields: ['userId'] },
+            { fields: ['status'] },
+            { fields: ['expiresAt'] },
+            { fields: ['createdAt'] }
+        ]
     }
-}, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
+);
 
-// ====================================
-// ÍNDICES
-// ====================================
-quoteSchema.index({ quoteNumber: 1 });
-quoteSchema.index({ user: 1, createdAt: -1 });
-quoteSchema.index({ status: 1 });
-quoteSchema.index({ expiresAt: 1 });
-
-// ====================================
-// VIRTUALS
-// ====================================
-// Virtual para verificar si está expirada
-quoteSchema.virtual('isExpired').get(function () {
-    return this.expiresAt < new Date();
-});
-
-// Virtual para días restantes
-quoteSchema.virtual('daysRemaining').get(function () {
-    const now = new Date();
-    const diff = this.expiresAt - now;
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 ? days : 0;
-});
-
-// ====================================
-// MÉTODOS ESTÁTICOS
-// ====================================
-// Generar número único de cotización
-quoteSchema.statics.generateQuoteNumber = async function () {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = (today.getMonth() + 1).toString().padStart(2, '0');
-    const day = today.getDate().toString().padStart(2, '0');
-    const datePrefix = `QT-${year}${month}${day}`;
-
-    // Buscar última cotización del día
-    const lastQuote = await this.findOne({
-        quoteNumber: new RegExp(`^${datePrefix}`)
-    }).sort({ quoteNumber: -1 });
-
-    let sequence = 1;
-    if (lastQuote) {
-        const parts = lastQuote.quoteNumber.split('-');
-        const lastSeq = parseInt(parts[2]);
-        sequence = lastSeq + 1;
-    }
-
-    return `${datePrefix}-${sequence.toString().padStart(3, '0')}`;
-};
-
-// Middleware removed - using manual status tracking
-
-// Exportar modelo
-module.exports = mongoose.model('Quote', quoteSchema);
+module.exports = Quote;

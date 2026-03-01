@@ -24,7 +24,7 @@ import {
     Cell
 } from 'recharts';
 import { Card } from '../../components/common';
-import { getDashboardStats } from '../../services/quoteService';
+import reportService from '../../services/reportService';
 import { toast } from 'react-toastify';
 
 // Colores para gráficos
@@ -47,7 +47,8 @@ const AdminDashboard = () => {
     const fetchDashboardStats = async () => {
         try {
             setLoading(true);
-            const response = await getDashboardStats();
+            // ✅ Llama a GET /api/reports/dashboard — endpoint unificado MySQL
+            const response = await reportService.getDashboardData();
             setStats(response.data);
         } catch (error) {
             console.error('Error fetching dashboard stats:', error);
@@ -57,11 +58,10 @@ const AdminDashboard = () => {
         }
     };
 
-    // Calcular tasa de conversión
+    // Calcular tasa de conversión desde monthly del backend MySQL
     const getConversionRate = () => {
-        if (!stats?.monthly) return '0%';
-        const total = stats.monthly.totalQuotes;
-        const closed = stats.monthly.closedQuotes;
+        const total = stats?.monthly?.totalQuotes || 0;
+        const closed = stats?.monthly?.closedQuotes || 0;
         if (total === 0) return '0%';
         return ((closed / total) * 100).toFixed(1) + '%';
     };
@@ -82,34 +82,37 @@ const AdminDashboard = () => {
         );
     }
 
-    // KPI Cards Data
+    // KPI Cards — leen directamente del JSON MySQL
     const kpiCards = [
         {
             title: 'Cotizaciones del Mes',
+            // ✅ stats.monthly.totalQuotes (generadas en el mes actual)
             value: stats?.monthly?.totalQuotes || 0,
             icon: FaFileInvoice,
             color: 'primary',
             bgColor: 'bg-primary-100',
             textColor: 'text-primary-700',
-            subtitle: `${stats?.monthly?.generatedQuotes || 0} generadas`,
+            subtitle: `${stats?.monthly?.generatedQuotes || 0} en estado Generada`,
         },
         {
-            title: 'Oportunidad de Venta',
-            value: `Bs. ${(stats?.monthly?.totalValue || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
+            title: 'Oportunidad de Venta (Mes)',
+            // ✅ stats.monthly.totalValue — suma de cotizaciones del mes
+            value: `Bs. ${Number(stats?.monthly?.totalValue || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
             icon: FaMoneyBillWave,
             color: 'success',
             bgColor: 'bg-success-100',
             textColor: 'text-success-700',
-            subtitle: 'Valor total cotizado',
+            subtitle: `Total global: Bs. ${Number(stats?.quotes?.revenue || 0).toLocaleString('es-BO', { minimumFractionDigits: 2 })}`,
         },
         {
-            title: 'Productos Únicos',
-            value: stats?.uniqueProducts || 0,
+            title: 'Productos en Catálogo',
+            // ✅ stats.inventory.activeProducts — productos activos en MySQL
+            value: stats?.inventory?.activeProducts || 0,
             icon: FaBoxOpen,
             color: 'purple',
             bgColor: 'bg-purple-100',
             textColor: 'text-purple-700',
-            subtitle: 'Productos cotizados',
+            subtitle: `${stats?.inventory?.totalProducts || 0} registrados en total`,
         },
         {
             title: 'Tasa de Conversión',
@@ -118,7 +121,7 @@ const AdminDashboard = () => {
             color: 'warning',
             bgColor: 'bg-warning-100',
             textColor: 'text-warning-700',
-            subtitle: `${stats?.monthly?.closedQuotes || 0} cerradas`,
+            subtitle: `${stats?.monthly?.closedQuotes || 0} cerradas este mes`,
         },
     ];
 
@@ -248,8 +251,10 @@ const AdminDashboard = () => {
                 <ResponsiveContainer width="100%" height={250}>
                     <LineChart data={stats?.quoteTrend || []}>
                         <CartesianGrid strokeDasharray="3 3" />
+                        {/* XAxis usa dataKey="date" — MySQL DATE_FORMAT(%d/%m) */}
+                        {/* Antes era dataKey="_id" (MongoDB ObjectId como fecha) */}
                         <XAxis
-                            dataKey="_id"
+                            dataKey="date"
                             tick={{ fontSize: 11 }}
                             angle={-45}
                             textAnchor="end"

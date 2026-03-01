@@ -1,5 +1,5 @@
-const Product = require('../models/Product');
-const Category = require('../models/Category');
+const { Op } = require('sequelize');
+const { Product, Category, Brand } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 const { deleteFile } = require('../utils/fileHelper');
 
@@ -9,7 +9,6 @@ const { deleteFile } = require('../utils/fileHelper');
  * @access  Public
  */
 exports.getProducts = asyncHandler(async (req, res) => {
-    // Extraer parámetros de query
     const {
         page = 1,
         limit = 12,
@@ -18,90 +17,80 @@ exports.getProducts = asyncHandler(async (req, res) => {
         search,
         minPrice,
         maxPrice,
-        sort = 'createdAt',
+        sort = '-createdAt',
         isFeatured
     } = req.query;
 
     // ====================================
-    // CONSTRUIR FILTROS DINÁMICAMENTE
+    // CONSTRUIR CLÁUSULA WHERE DINÁMICA
     // ====================================
-    const filters = { isActive: true }; // Siempre mostrar solo productos activos
+    const where = { isActive: true };
 
-    // Filtrar por categoría
-    if (category) {
-        filters.category = category;
-    }
+    // Filtrar por categoría (FK numérico)
+    if (category) where.categoryId = category;
 
-    // Búsqueda por nombre (regex case-insensitive)
-    if (search) {
-        filters.name = { $regex: search, $options: 'i' };
-    }
+    // Filtrar por marca (FK numérico)
+    if (brand) where.brandId = brand;
+
+    // Búsqueda por nombre (Op.like = equivalente a $regex case-insensitive)
+    if (search) where.name = { [Op.like]: `%${search}%` };
 
     // Filtrar por rango de precio
     if (minPrice || maxPrice) {
-        filters.price = {};
-        if (minPrice) filters.price.$gte = Number(minPrice);
-        if (maxPrice) filters.price.$lte = Number(maxPrice);
-    }
-
-    // Filtrar por marca
-    if (brand) {
-        filters.brand = brand;
+        where.price = {};
+        if (minPrice) where.price[Op.gte] = Number(minPrice);
+        if (maxPrice) where.price[Op.lte] = Number(maxPrice);
     }
 
     // Filtrar por destacados
-    if (isFeatured !== undefined) {
-        filters.isFeatured = isFeatured === 'true';
-    }
+    if (isFeatured !== undefined) where.isFeatured = isFeatured === 'true';
 
     // ====================================
-    // CONFIGURAR ORDENAMIENTO
+    // ORDENAMIENTO
+    // Sequelize usa arrays: [campo, 'ASC'|'DESC']
     // ====================================
-    let sortBy = {};
-
-    switch (sort) {
-        case 'price':
-            sortBy = { price: 1 }; // Precio ascendente
-            break;
-        case '-price':
-            sortBy = { price: -1 }; // Precio descendente
-            break;
-        case 'createdAt':
-            sortBy = { createdAt: 1 }; // Más antiguos primero
-            break;
-        case '-createdAt':
-            sortBy = { createdAt: -1 }; // Más recientes primero
-            break;
-        case 'featured':
-            sortBy = { isFeatured: -1, createdAt: -1 }; // Destacados primero, luego recientes
-            break;
-        default:
-            sortBy = { createdAt: -1 }; // Default: más recientes primero
-    }
+    const orderMap = {
+        'price': [['price', 'ASC']],
+        '-price': [['price', 'DESC']],
+        'createdAt': [['createdAt', 'ASC']],
+        '-createdAt': [['createdAt', 'DESC']],
+        'featured': [['isFeatured', 'DESC'], ['createdAt', 'DESC']]
+    };
+    const order = orderMap[sort] || [['createdAt', 'DESC']];
 
     // ====================================
     // PAGINACIÓN
     // ====================================
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
-    const skip = (pageNum - 1) * limitNum;
+    const offset = (pageNum - 1) * limitNum;
 
     // ====================================
-    // EJECUTAR QUERY
+    // EJECUTAR QUERY CON JOINS (include)
+    // Equivalente al .populate() de Mongoose
     // ====================================
-    const products = await Product.find(filters)
-        .populate('category', 'name slug')
-        .populate('brand', 'name slug image')
-        .sort(sortBy)
-        .skip(skip)
-        .limit(limitNum);
+    const { count, rows: products } = await Product.findAndCountAll({
+        where,
+        include: [
+            {
+                model: Category,
+                as: 'category',
+                attributes: ['id', 'name', 'slug']
+            },
+            {
+                model: Brand,
+                as: 'brand',
+                attributes: ['id', 'name', 'slug', 'logo'],
+                required: false   // LEFT JOIN: producto sin marca no se descarta
+            }
+        ],
+        order,
+        limit: limitNum,
+        offset,
+        distinct: true   // Necesario para que count sea correcto con includes
+    });
 
-    // Contar total de productos que coinciden con los filtros
-    const total = await Product.countDocuments(filters);
-
-    // Calcular información de paginación
-    const totalPages = Math.ceil(total / limitNum);
-    const currentPage = pageNum;
+    const totalPages = Math.ceil(count / limitNum);
     const hasNextPage = pageNum < totalPages;
     const hasPrevPage = pageNum > 1;
 
@@ -110,9 +99,9 @@ exports.getProducts = asyncHandler(async (req, res) => {
         data: {
             products,
             pagination: {
-                currentPage,
+                currentPage: pageNum,
                 totalPages,
-                totalProducts: total,
+                totalProducts: count,
                 limit: limitNum,
                 hasNextPage,
                 hasPrevPage
@@ -127,38 +116,35 @@ exports.getProducts = asyncHandler(async (req, res) => {
  * @access  Public
  */
 exports.getProduct = asyncHandler(async (req, res) => {
-    const { id } = req.params;
+    const product = await Product.findByPk(req.params.id, {
+        include: [
+            { model: Category, as: 'category', attributes: ['id', 'name', 'slug'] },
+            { model: Brand, as: 'brand', attributes: ['id', 'name', 'slug', 'logo'], required: false }
+        ]
+    });
 
-    // Buscar producto y popular categoría
-    const product = await Product.findById(id).populate('category', 'name slug');
-
-    // Validar existencia y estado activo
     if (!product || !product.isActive) {
-        return res.status(404).json({
-            success: false,
-            message: 'Producto no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Producto no encontrado' });
     }
 
     // Incrementar contador de vistas
     product.views += 1;
     await product.save();
 
-    // Buscar productos relacionados (misma categoría, máximo 4)
-    const relatedProducts = await Product.find({
-        category: product.category,
-        _id: { $ne: product._id }, // Excluir el producto actual
-        isActive: true
-    })
-        .limit(4)
-        .select('name price images slug');
+    // Buscar productos relacionados (misma categoría, excluyendo el actual, máx 4)
+    const relatedProducts = await Product.findAll({
+        where: {
+            categoryId: product.categoryId,
+            id: { [Op.ne]: product.id },   // Op.ne equivale a $ne de Mongoose
+            isActive: true
+        },
+        attributes: ['id', 'name', 'price', 'images', 'slug'],
+        limit: 4
+    });
 
     res.status(200).json({
         success: true,
-        data: {
-            product,
-            relatedProducts
-        }
+        data: { product, relatedProducts }
     });
 });
 
@@ -169,26 +155,31 @@ exports.getProduct = asyncHandler(async (req, res) => {
  */
 exports.createProduct = asyncHandler(async (req, res) => {
     const {
-        name,
-        description,
-        longDescription,
-        price,
-        category,
-        brand,
-        stock,
-        isFeatured,
-        discountPercentage,
-        specifications
+        name, description, longDescription,
+        price, stock, isFeatured, discountPercentage, specifications
     } = req.body;
 
-    // ====================================
-    // PROCESAR SPECIFICATIONS (JSON string)
-    // ====================================
+    // ✅ Aceptar tanto 'category'/'brand' como 'categoryId'/'brandId'
+    // El frontend puede enviar cualquiera de las dos formas
+    const categoryId = req.body.categoryId || req.body.category;
+    const brandId = req.body.brandId || req.body.brand || null;
+
+    // Validar que llegó la categoría
+    if (!categoryId) {
+        return res.status(400).json({
+            success: false,
+            message: 'La categoría es obligatoria (envía categoryId o category)'
+        });
+    }
+
+    // Parsear specifications si viene como string JSON
     let specs = {};
     if (req.body.specifications) {
         try {
-            specs = JSON.parse(req.body.specifications);
-        } catch (error) {
+            specs = typeof specifications === 'string'
+                ? JSON.parse(specifications)
+                : specifications;
+        } catch {
             return res.status(400).json({
                 success: false,
                 message: 'El formato de specifications es inválido. Debe ser un JSON válido.'
@@ -196,50 +187,50 @@ exports.createProduct = asyncHandler(async (req, res) => {
         }
     }
 
-    // ====================================
-    // PROCESAR IMÁGENES
-    // ====================================
-    const images = [];
-    if (req.files && req.files.length > 0) {
-        req.files.forEach(file => {
-            images.push(`/uploads/products/${file.filename}`);
-        });
-    }
+    // Procesar imágenes subidas con Multer
+    const images = req.files && req.files.length > 0
+        ? req.files.map(f => f.url)   // ← ruta normalizada por addNormalizedUrl
+        : [];
 
-    // ====================================
-    // VALIDAR QUE LA CATEGORÍA EXISTE
-    // ====================================
-    const categoryExists = await Category.findById(category);
+    // Validar que la categoría existe
+    const categoryExists = await Category.findByPk(categoryId);
     if (!categoryExists) {
-        return res.status(404).json({
-            success: false,
-            message: 'Categoría no encontrada'
-        });
+        return res.status(404).json({ success: false, message: `Categoría con id ${categoryId} no encontrada` });
     }
 
-    // ====================================
-    // CREAR PRODUCTO
-    // ====================================    // Crear producto
+    // Validar marca si se envió
+    if (brandId) {
+        const brandExists = await Brand.findByPk(brandId);
+        if (!brandExists) {
+            return res.status(404).json({ success: false, message: `Marca con id ${brandId} no encontrada` });
+        }
+    }
+
     const product = await Product.create({
         name,
         description,
-        longDescription: longDescription || undefined,
+        longDescription: longDescription || null,
         price,
-        category,
-        brand: brand || undefined,  // Solo incluir si existe
+        categoryId,
+        brandId: brandId || null,
         stock,
-        images: images,
+        images,
         specifications: specs,
         isFeatured: isFeatured === 'true' || isFeatured === true || false,
         discountPercentage: discountPercentage ? parseFloat(discountPercentage) : 0
     });
 
-    // Popular categoría antes de retornar
-    await product.populate('category', 'name slug');
+    // Recargar con asociaciones para la respuesta
+    const created = await Product.findByPk(product.id, {
+        include: [
+            { model: Category, as: 'category', attributes: ['id', 'name', 'slug'] },
+            { model: Brand, as: 'brand', attributes: ['id', 'name', 'slug'], required: false }
+        ]
+    });
 
     res.status(201).json({
         success: true,
-        data: product,
+        data: created,
         message: 'Producto creado exitosamente'
     });
 });
@@ -250,70 +241,46 @@ exports.createProduct = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.updateProduct = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-
-    // Buscar producto
-    let product = await Product.findById(id);
+    const product = await Product.findByPk(req.params.id);
 
     if (!product) {
-        return res.status(404).json({
-            success: false,
-            message: 'Producto no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Producto no encontrado' });
     }
 
-    // ====================================
-    // ACTUALIZAR CampOS
-    // ====================================
-    // Los datos ya vienen parseados y validados desde el middleware parseProductData
-
     // Actualizar campos básicos
-    if (req.body.name) product.name = req.body.name;
-    if (req.body.description) product.description = req.body.description;
+    if (req.body.name !== undefined) product.name = req.body.name;
+    if (req.body.description !== undefined) product.description = req.body.description;
     if (req.body.longDescription !== undefined) product.longDescription = req.body.longDescription;
     if (req.body.price !== undefined) product.price = req.body.price;
     if (req.body.stock !== undefined) product.stock = req.body.stock;
+    if (req.body.isFeatured !== undefined) product.isFeatured = req.body.isFeatured;
+    if (req.body.discountPercentage !== undefined) product.discountPercentage = req.body.discountPercentage;
 
-    // Validar categoría si se actualiza
+    // Validar y actualizar categoría
     if (req.body.category) {
-        const categoryExists = await Category.findById(req.body.category);
+        const categoryExists = await Category.findByPk(req.body.category);
         if (!categoryExists) {
-            return res.status(404).json({
-                success: false,
-                message: 'La categoría especificada no existe'
-            });
+            return res.status(404).json({ success: false, message: 'La categoría especificada no existe' });
         }
-        product.category = req.body.category;
+        product.categoryId = req.body.category;
     }
 
-    // Actualizar marca (opcional)
+    // Validar y actualizar marca (opcional)
     if (req.body.brand) {
-        const Brand = require('../models/Brand');
-        const brandExists = await Brand.findById(req.body.brand);
+        const brandExists = await Brand.findByPk(req.body.brand);
         if (!brandExists) {
-            return res.status(404).json({
-                success: false,
-                message: 'La marca especificada no existe'
-            });
+            return res.status(404).json({ success: false, message: 'La marca especificada no existe' });
         }
-        product.brand = req.body.brand;
+        product.brandId = req.body.brand;
     }
 
-    // Actualizar isFeatured (ya viene como booleano desde middleware)
-    if (req.body.isFeatured !== undefined) {
-        product.isFeatured = req.body.isFeatured;
-    }
-
-    // Actualizar descuento (ya viene como number desde middleware)
-    if (req.body.discountPercentage !== undefined) {
-        product.discountPercentage = req.body.discountPercentage;
-    }
-
-    // Actualizar specifications
+    // Actualizar specifications si se enviaron
     if (req.body.specifications) {
         try {
-            product.specifications = JSON.parse(req.body.specifications);
-        } catch (error) {
+            product.specifications = typeof req.body.specifications === 'string'
+                ? JSON.parse(req.body.specifications)
+                : req.body.specifications;
+        } catch {
             return res.status(400).json({
                 success: false,
                 message: 'El formato de specifications es inválido. Debe ser un JSON válido.'
@@ -321,34 +288,30 @@ exports.updateProduct = asyncHandler(async (req, res) => {
         }
     }
 
-    // ====================================
-    // ACTUALIZAR IMÁGENES SI HAY NUEVAS
-    // ====================================
+    // Actualizar imágenes si se subieron nuevas
     if (req.files && req.files.length > 0) {
-        // Eliminar imágenes antiguas del filesystem
+        // Eliminar imágenes anteriores del disco
         if (product.images && product.images.length > 0) {
             for (const imagePath of product.images) {
                 await deleteFile(imagePath);
             }
         }
-
-        // Agregar nuevas imágenes
-        const newImages = [];
-        req.files.forEach((file) => {
-            newImages.push(`/uploads/products/${file.filename}`);
-        });
-        product.images = newImages;
+        product.images = req.files.map(f => f.url);   // ← ruta normalizada
     }
 
-    // Guardar cambios
     await product.save();
 
-    // Popular categoría antes de retornar
-    await product.populate('category', 'name slug');
+    // Recargar con asociaciones
+    const updated = await Product.findByPk(product.id, {
+        include: [
+            { model: Category, as: 'category', attributes: ['id', 'name', 'slug'] },
+            { model: Brand, as: 'brand', attributes: ['id', 'name', 'slug'], required: false }
+        ]
+    });
 
     res.status(200).json({
         success: true,
-        data: product,
+        data: updated,
         message: 'Producto actualizado exitosamente'
     });
 });
@@ -359,24 +322,15 @@ exports.updateProduct = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.deleteProduct = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-
-    // Buscar producto
-    const product = await Product.findById(id);
+    const product = await Product.findByPk(req.params.id);
 
     if (!product) {
-        return res.status(404).json({
-            success: false,
-            message: 'Producto no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Producto no encontrado' });
     }
 
-    // Soft delete: marcar como inactivo
+    // Soft delete: marcar como inactivo (no borra el registro)
     product.isActive = false;
     await product.save();
 
-    res.status(200).json({
-        success: true,
-        message: 'Producto eliminado exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Producto eliminado exitosamente' });
 });

@@ -4,15 +4,10 @@ import api from './api';
  * Servicio para gestionar Cotizaciones
  */
 
-// Generar nueva cotización
+// Generar nueva cotización (devuelve JSON con la cotización creada, NO un blob)
 export const generateQuote = async (customerData) => {
-    const response = await api.post('/quotes',
-        { customerData },
-        {
-            responseType: 'blob'  // Importante para recibir PDF
-        }
-    );
-    return response;
+    const response = await api.post('/quotes', { customerData });
+    return response.data;
 };
 
 // Obtener cotizaciones del usuario
@@ -27,12 +22,20 @@ export const getQuote = async (id) => {
     return response.data;
 };
 
-// Descargar PDF de cotización
-export const downloadQuotePDF = async (quoteId) => {
+// Descargar PDF de cotización y disparar descarga en el browser
+export const downloadQuotePDF = async (quoteId, quoteNumber = '') => {
     const response = await api.get(`/quotes/${quoteId}/pdf`, {
         responseType: 'blob'
     });
-    return response;
+    // Crear enlace temporal para disparar la descarga
+    const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `cotizacion-${quoteNumber || quoteId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
 };
 
 // Eliminar cotización

@@ -1,71 +1,73 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
 const slugify = require('slugify');
+const { sequelize } = require('../config/database');
 
-// Schema de Marca
-const brandSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'El nombre de la marca es requerido'],
-        unique: true,
-        trim: true,
-        maxlength: [100, 'El nombre no puede exceder 100 caracteres']
+class Brand extends Model { }
+
+Brand.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        name: {
+            type: DataTypes.STRING(100),
+            allowNull: false,
+            unique: { msg: 'Ya existe una marca con ese nombre' },
+            validate: {
+                notEmpty: { msg: 'El nombre de la marca es requerido' }
+            }
+        },
+        slug: {
+            type: DataTypes.STRING(120),
+            unique: true,
+            allowNull: true
+        },
+        logo: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        }
     },
-    slug: {
-        type: String,
-        unique: true,
-        lowercase: true,
-        trim: true
-    },
-    image: {
-        type: String,
-        required: [true, 'La imagen/logo de la marca es requerida']
-    },
-    description: {
-        type: String,
-        trim: true,
-        maxlength: [500, 'La descripción no puede exceder 500 caracteres']
-    },
-    isActive: {
-        type: Boolean,
-        default: true
+    {
+        sequelize,
+        modelName: 'Brand',
+        tableName: 'Brands',
+        timestamps: true,
+        indexes: [
+            { fields: ['slug'], unique: true },
+            { fields: ['isActive'] }
+        ]
     }
-}, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
+);
 
 // ====================================
-// ÍNDICES
+// HOOK: Auto-generar slug desde name con verificación de unicidad
+// Igual que Product.js: garantiza que no haya colisiones de slug
 // ====================================
-brandSchema.index({ slug: 1 });
-brandSchema.index({ isActive: 1 });
-
-// ====================================
-// MIDDLEWARE PRE-VALIDATE
-// ====================================
-// Auto-generar slug desde name si no existe
-brandSchema.pre('validate', function (next) {
-    if (this.name && !this.slug) {
-        this.slug = slugify(this.name, {
+Brand.addHook('beforeValidate', async (brand) => {
+    if (brand.name && !brand.slug) {
+        let base = slugify(brand.name, {
             lower: true,
             strict: true,
             locale: 'es'
         });
+        // Verificar si el slug ya existe (puede pasar si el nombre ya tiene tilde o acento especial)
+        const existing = await Brand.findOne({ where: { slug: base } });
+        if (existing && existing.id !== brand.id) {
+            brand.slug = `${base}-${Date.now()}`;
+        } else {
+            brand.slug = base;
+        }
     }
-    next();
 });
 
-// ====================================
-// VIRTUALS
-// ====================================
-// Virtual para contar productos de esta marca
-brandSchema.virtual('productCount', {
-    ref: 'Product',
-    localField: '_id',
-    foreignField: 'brand',
-    count: true
-});
-
-// Exportar modelo
-module.exports = mongoose.model('Brand', brandSchema);
+module.exports = Brand;

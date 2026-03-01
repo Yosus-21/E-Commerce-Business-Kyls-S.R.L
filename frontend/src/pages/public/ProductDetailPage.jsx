@@ -85,7 +85,7 @@ const ProductDetailPage = () => {
     const handleAddToCart = async () => {
         try {
             setAddingToCart(true);
-            await addItem(product._id, quantity);
+            await addItem(product.id, quantity);
             toast.success(`${quantity} ${quantity === 1 ? 'unidad agregada' : 'unidades agregadas'} al carrito`, {
                 position: 'bottom-right',
                 autoClose: 2000,
@@ -224,7 +224,7 @@ const ProductDetailPage = () => {
                         </Card>
 
                         {/* Miniaturas de imágenes adicionales */}
-                        {product.images && product.images.length > 1 && (
+                        {product.images?.length > 1 && (
                             <div className="grid grid-cols-4 gap-3">
                                 {product.images.slice(0, 4).map((img, index) => (
                                     <div
@@ -246,24 +246,20 @@ const ProductDetailPage = () => {
                     <div className="space-y-6">
 
                         {/* Categoría Badge */}
-                        {product.category?.name && (
-                            <div>
-                                <Badge variant="primary" size="lg">
-                                    {product.category.name}
-                                </Badge>
-                            </div>
-                        )}
+                        <div>
+                            <Badge variant="primary" size="lg">
+                                {product.category?.name || 'Sin Categoría'}
+                            </Badge>
+                        </div>
 
                         {/* Título y Marca */}
                         <div>
                             <h1 className="text-3xl lg:text-4xl font-heading font-bold text-secondary-900 mb-3 leading-tight">
                                 {product.name}
                             </h1>
-                            {product.brand && (
-                                <p className="text-lg text-secondary-600">
-                                    Marca: <span className="font-semibold text-secondary-800">{product.brand}</span>
-                                </p>
-                            )}
+                            <p className="text-lg text-secondary-600">
+                                Marca: <span className="font-semibold text-secondary-800">{product.brand?.name || (typeof product.brand === 'string' ? product.brand : 'Sin Marca')}</span>
+                            </p>
                         </div>
 
                         {/* Precio - Principal CTA Visual */}
@@ -425,7 +421,7 @@ const ProductDetailPage = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                             {relatedProducts.map((relatedProduct) => (
                                 <ProductCard
-                                    key={relatedProduct._id}
+                                    key={relatedProduct.id || relatedProduct._id}
                                     product={relatedProduct}
                                 />
                             ))}

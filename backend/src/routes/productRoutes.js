@@ -9,6 +9,7 @@ const {
     handleMulterError,
     validateRequest
 } = require('../middlewares');
+const { addNormalizedUrl } = require('../middlewares/uploadImages');
 
 // Importar validadores
 const {
@@ -57,13 +58,29 @@ const parseProductData = (req, res, next) => {
         req.body.stock = isNaN(stock) ? undefined : stock;
     }
 
-    // Limpiar brand vacíos (evitar CastError de ObjectId)
-    if (req.body.brand === '' || req.body.brand === 'null' || req.body.brand === 'undefined') {
+    // ✅ Normalizar categoryId como entero (acepta 'categoryId' o 'category')
+    const rawCategory = req.body.categoryId || req.body.category;
+    if (rawCategory) {
+        const catInt = parseInt(rawCategory);
+        req.body.categoryId = isNaN(catInt) ? undefined : catInt;
+        req.body.category = req.body.categoryId; // Mantener ambos sincronizados
+    }
+
+    // ✅ Normalizar brandId como entero (acepta 'brandId' o 'brand') — OPCIONAL
+    const rawBrand = req.body.brandId || req.body.brand;
+    if (rawBrand && rawBrand !== '' && rawBrand !== 'null' && rawBrand !== 'undefined') {
+        const brandInt = parseInt(rawBrand);
+        req.body.brandId = isNaN(brandInt) ? undefined : brandInt;
+        req.body.brand = req.body.brandId;
+    } else {
+        // Limpiar cualquier valor vacío para que el validador opcional lo ignore
+        delete req.body.brandId;
         delete req.body.brand;
     }
 
     next();
 };
+
 
 // ====================================
 // RUTAS PÚBLICAS
@@ -103,10 +120,11 @@ router.post('/',
     isAdmin,                      // 2. Verificar rol admin
     uploadProductImages,          // 3. Procesar upload de imágenes (máximo 5)
     handleMulterError,            // 4. Manejar errores de Multer
-    parseProductData,             // 5. ✅ NUEVO: Parsear FormData a tipos correctos
-    createProductValidator,       // 6. Validar datos (ahora con tipos correctos)
-    validateRequest,              // 7. Procesar validaciones
-    createProduct                 // 8. Controller
+    addNormalizedUrl,             // 5. ✅ Normalizar rutas (fix backslashes Windows)
+    parseProductData,             // 6. Parsear FormData a tipos correctos
+    createProductValidator,       // 7. Validar datos
+    validateRequest,              // 8. Procesar validaciones
+    createProduct                 // 9. Controller
 );
 
 /**
@@ -120,10 +138,11 @@ router.put('/:id',
     isAdmin,                      // 2. Verificar rol admin
     uploadProductImages,          // 3. Procesar upload de imágenes (opcional)
     handleMulterError,            // 4. Manejar errores de Multer
-    parseProductData,             // 5. ✅ NUEVO: Parsear FormData a tipos correctos
-    updateProductValidator,       // 6. Validar datos (ahora con tipos correctos)
-    validateRequest,              // 7. Procesar validaciones
-    updateProduct                 // 8. Controller
+    addNormalizedUrl,             // 5. ✅ Normalizar rutas (fix backslashes Windows)
+    parseProductData,             // 6. Parsear FormData a tipos correctos
+    updateProductValidator,       // 7. Validar datos
+    validateRequest,              // 8. Procesar validaciones
+    updateProduct                 // 9. Controller
 );
 
 /**

@@ -35,7 +35,7 @@ const ServiceDetailsPage = () => {
             const response = await serviceService.getAllServices();
             if (response.success && Array.isArray(response.data)) {
                 // Filtrar el servicio actual y tomar máx 3
-                const others = response.data.filter(s => s._id !== id).slice(0, 3);
+                const others = response.data.filter(s => s.id.toString() !== id).slice(0, 3);
                 setRelatedServices(others);
             }
         } catch (error) {
@@ -205,7 +205,7 @@ const ServiceDetailsPage = () => {
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             {relatedServices.map((related) => (
-                                <Link key={related._id} to={`/services/${related._id}`} className="block group h-full">
+                                <Link key={related.id} to={`/services/${related.id}`} className="block group h-full">
                                     <Card hoverable className="h-full overflow-hidden flex flex-col transition-transform hover:-translate-y-1">
                                         {related.image && (
                                             <div className="h-48 overflow-hidden bg-secondary-100">

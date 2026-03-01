@@ -52,7 +52,7 @@ const AdminProductsPage = () => {
             });
 
             // Actualizar lista
-            setProducts(prev => prev.filter(p => p._id !== id));
+            setProducts(prev => prev.filter(p => p.id !== id));
         } catch (error) {
             console.error('Error al eliminar producto:', error);
             toast.error(error.message || 'Error al eliminar producto', {
@@ -162,7 +162,7 @@ const AdminProductsPage = () => {
                                     const stockBadge = getStockBadge(product.stock);
 
                                     return (
-                                        <tr key={product._id} className="hover:bg-secondary-50 transition-colors">
+                                        <tr key={product.id} className="hover:bg-secondary-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center space-x-3">
                                                     <img
@@ -198,14 +198,14 @@ const AdminProductsPage = () => {
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 <div className="flex items-center justify-end space-x-2">
                                                     <button
-                                                        onClick={() => navigate(`/admin/products/edit/${product._id}`)}
+                                                        onClick={() => navigate(`/admin/products/edit/${product.id}`)}
                                                         className="inline-flex items-center px-3 py-2 text-sm font-medium text-primary-700 hover:text-primary-900 hover:bg-primary-50 rounded-lg transition-colors"
                                                     >
                                                         <FaEdit className="mr-1" />
                                                         Editar
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(product._id, product.name)}
+                                                        onClick={() => handleDelete(product.id, product.name)}
                                                         className="inline-flex items-center px-3 py-2 text-sm font-medium text-danger-700 hover:text-danger-900 hover:bg-danger-50 rounded-lg transition-colors"
                                                     >
                                                         <FaTrash className="mr-1" />

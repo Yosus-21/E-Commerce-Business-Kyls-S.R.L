@@ -7,6 +7,7 @@ import * as productService from '../../services/productService';
 import * as brandService from '../../services/brandService';
 import * as categoryService from '../../services/categoryService';
 import { toast } from 'react-toastify';
+import { getImageUrl } from '../../utils/imageHelper';
 
 /**
  * ProductsPage Component
@@ -130,8 +131,9 @@ const ProductsPage = () => {
         navigate('/products');
     };
 
-    const selectedBrandInfo = brands.find(b => b._id === selectedBrand);
-    const selectedCategoryInfo = categories.find(c => c._id === selectedCategory);
+    // ✅ MySQL usa id numérico, no _id de Mongo
+    const selectedBrandInfo = brands.find(b => (b.id || b._id)?.toString() === selectedBrand?.toString());
+    const selectedCategoryInfo = categories.find(c => (c.id || c._id)?.toString() === selectedCategory?.toString());
 
     return (
         <div className="min-h-screen bg-secondary-50">
@@ -202,30 +204,34 @@ const ProductsPage = () => {
                                         </label>
 
                                         {/* Lista de marcas */}
-                                        {brands.map((brand) => (
-                                            <label
-                                                key={brand._id}
-                                                className="flex items-center cursor-pointer hover:bg-secondary-50 p-2 rounded-lg transition-colors"
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="brand"
-                                                    checked={selectedBrand === brand._id}
-                                                    onChange={() => handleBrandFilter(brand._id)}
-                                                    className="mr-2 text-primary-600 focus:ring-primary-500"
-                                                />
-                                                {brand.image && (
-                                                    <img
-                                                        src={`${import.meta.env.VITE_API_URL}${brand.image}`}
-                                                        alt={brand.name}
-                                                        className="w-6 h-6 object-contain mr-2"
+                                        {brands.map((brand) => {
+                                            const brandId = brand.id || brand._id;
+                                            return (
+                                                <label
+                                                    key={brandId}
+                                                    className="flex items-center cursor-pointer hover:bg-secondary-50 p-2 rounded-lg transition-colors"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="brand"
+                                                        checked={selectedBrand?.toString() === brandId?.toString()}
+                                                        onChange={() => handleBrandFilter(brandId)}
+                                                        className="mr-2 text-primary-600 focus:ring-primary-500"
                                                     />
-                                                )}
-                                                <span className="text-sm text-secondary-700">
-                                                    {brand.name}
-                                                </span>
-                                            </label>
-                                        ))}
+                                                    {/* ✅ usa brand.logo (campo MySQL) con getImageUrl */}
+                                                    {brand.logo && (
+                                                        <img
+                                                            src={getImageUrl(brand.logo)}
+                                                            alt={brand.name}
+                                                            className="w-6 h-6 object-contain mr-2"
+                                                        />
+                                                    )}
+                                                    <span className="text-sm text-secondary-700">
+                                                        {brand.name}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -256,23 +262,26 @@ const ProductsPage = () => {
                                         </label>
 
                                         {/* Lista de categorías */}
-                                        {categories.map((category) => (
-                                            <label
-                                                key={category._id}
-                                                className="flex items-center cursor-pointer hover:bg-secondary-50 p-2 rounded-lg transition-colors"
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="category"
-                                                    checked={selectedCategory === category._id}
-                                                    onChange={() => handleCategoryFilter(category._id)}
-                                                    className="mr-2 text-primary-600 focus:ring-primary-500"
-                                                />
-                                                <span className="text-sm text-secondary-700">
-                                                    {category.name}
-                                                </span>
-                                            </label>
-                                        ))}
+                                        {categories.map((category) => {
+                                            const catId = category.id || category._id;
+                                            return (
+                                                <label
+                                                    key={catId}
+                                                    className="flex items-center cursor-pointer hover:bg-secondary-50 p-2 rounded-lg transition-colors"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="category"
+                                                        checked={selectedCategory?.toString() === catId?.toString()}
+                                                        onChange={() => handleCategoryFilter(catId)}
+                                                        className="mr-2 text-primary-600 focus:ring-primary-500"
+                                                    />
+                                                    <span className="text-sm text-secondary-700">
+                                                        {category.name}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -346,7 +355,8 @@ const ProductsPage = () => {
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {products.map((product) => (
-                                        <ProductCard key={product._id} product={product} />
+                                        // ✅ MySQL usa id numérico
+                                        <ProductCard key={product.id || product._id} product={product} />
                                     ))}
                                 </div>
                             </div>

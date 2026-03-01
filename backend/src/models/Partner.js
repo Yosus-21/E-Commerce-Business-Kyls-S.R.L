@@ -1,44 +1,48 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-/**
- * Partner/Aliado Schema
- * Representa las empresas clientes que confían en Business Kyla
- */
-const partnerSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: [true, 'El nombre del aliado es obligatorio'],
-        trim: true,
-        maxlength: [100, 'El nombre no puede exceder 100 caracteres']
+class Partner extends Model { }
+
+Partner.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        name: {
+            type: DataTypes.STRING(100),
+            allowNull: false,
+            validate: {
+                notEmpty: { msg: 'El nombre del partner es requerido' }
+            }
+        },
+        logo: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        website: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        order: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0
+        },
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        }
     },
-    logo: {
-        type: String,
-        required: [true, 'El logo es obligatorio']
-    },
-    order: {
-        type: Number,
-        default: 0,
-        index: true
-    },
-    isActive: {
-        type: Boolean,
-        default: true,
-        index: true
+    {
+        sequelize,
+        modelName: 'Partner',
+        tableName: 'Partners',
+        timestamps: true,
+        indexes: [
+            { fields: ['isActive'] }
+        ]
     }
-}, {
-    timestamps: true
-});
+);
 
-// Índice compuesto para consultas optimizadas
-partnerSchema.index({ isActive: 1, order: 1 });
-
-/**
- * Obtener aliados activos ordenados
- */
-partnerSchema.statics.getActive = function () {
-    return this.find({ isActive: true })
-        .sort({ order: 1, createdAt: -1 })
-        .select('name logo order createdAt');
-};
-
-module.exports = mongoose.model('Partner', partnerSchema);
+module.exports = Partner;

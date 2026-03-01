@@ -1,64 +1,53 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-/**
- * Schema de Imagen Destacada (Hero Carousel)
- */
-const featuredImageSchema = new mongoose.Schema({
-    image: {
-        type: String,
-        required: [true, 'La imagen es requerida']
+class FeaturedImage extends Model { }
+
+FeaturedImage.init(
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            autoIncrement: true,
+            primaryKey: true
+        },
+        title: {
+            type: DataTypes.STRING(200),
+            allowNull: true
+        },
+        subtitle: {
+            type: DataTypes.STRING(300),
+            allowNull: true
+        },
+        imageUrl: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            validate: {
+                notEmpty: { msg: 'La URL de la imagen es requerida' }
+            }
+        },
+        linkUrl: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        order: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0
+        },
+        isActive: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true
+        }
     },
-    order: {
-        type: Number,
-        default: 0,
-        index: true
-    },
-    isActive: {
-        type: Boolean,
-        default: true,
-        index: true
+    {
+        sequelize,
+        modelName: 'FeaturedImage',
+        tableName: 'FeaturedImages',
+        timestamps: true,
+        indexes: [
+            { fields: ['isActive'] },
+            { fields: ['order'] }
+        ]
     }
-}, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
+);
 
-// ====================================
-// ÍNDICES
-// ====================================
-featuredImageSchema.index({ order: 1, isActive: 1 });
-
-// ====================================
-// MÉTODOS ESTÁTICOS
-// ====================================
-/**
- * Obtener imágenes activas ordenadas
- */
-featuredImageSchema.statics.getActive = function () {
-    return this.find({ isActive: true })
-        .sort({ order: 1, createdAt: -1 })
-        .select('image order createdAt');
-};
-
-/**
- * Obtener todas las imágenes (admin)
- */
-featuredImageSchema.statics.getAll = function () {
-    return this.find()
-        .sort({ order: 1, createdAt: -1 });
-};
-
-// ====================================
-// MIDDLEWARE
-// ====================================
-// Pre-save: Asignar orden automáticamente si no se proporciona
-featuredImageSchema.pre('save', async function (next) {
-    if (this.isNew && this.order === 0) {
-        const count = await this.constructor.countDocuments();
-        this.order = count;
-    }
-    next();
-});
-
-module.exports = mongoose.model('FeaturedImage', featuredImageSchema);
+module.exports = FeaturedImage;

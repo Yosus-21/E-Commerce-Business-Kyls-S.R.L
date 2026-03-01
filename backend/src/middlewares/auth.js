@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { User } = require('../models/index');
 
 /**
  * Middleware de autenticación JWT
@@ -14,7 +14,6 @@ const protect = async (req, res, next) => {
             req.headers.authorization &&
             req.headers.authorization.startsWith('Bearer')
         ) {
-            // Extraer token del formato "Bearer <token>"
             token = req.headers.authorization.split(' ')[1];
         }
 
@@ -29,8 +28,9 @@ const protect = async (req, res, next) => {
         // 3. Verificar y decodificar el token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // 4. Buscar usuario en la base de datos (SIN incluir password por seguridad)
-        const user = await User.findById(decoded.id);
+        // 4. Buscar usuario por PK (equivalente a findById en Mongoose)
+        //    El defaultScope de User excluye el password automáticamente
+        const user = await User.findByPk(decoded.id);
 
         // 5. Verificar que el usuario existe y está activo
         if (!user) {
@@ -47,13 +47,12 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // 6. Adjuntar usuario al objeto request (SIN password)
+        // 6. Adjuntar usuario al objeto request (sin password por el defaultScope)
         req.user = user;
 
         // 7. Continuar al siguiente middleware
         next();
     } catch (error) {
-        // Manejo de errores específicos de JWT
         if (error.name === 'JsonWebTokenError') {
             return res.status(401).json({
                 success: false,
@@ -68,7 +67,6 @@ const protect = async (req, res, next) => {
             });
         }
 
-        // Error genérico
         return res.status(401).json({
             success: false,
             error: 'No autorizado'
@@ -78,12 +76,10 @@ const protect = async (req, res, next) => {
 
 /**
  * Middleware de autorización basada en roles
- * Verifica que el usuario tenga uno de los roles permitidos
  * @param {...string} roles - Roles permitidos (ej: 'admin', 'user')
  */
 const authorize = (...roles) => {
     return (req, res, next) => {
-        // Verificar que el usuario existe (debe pasar por protect primero)
         if (!req.user) {
             return res.status(401).json({
                 success: false,
@@ -91,7 +87,6 @@ const authorize = (...roles) => {
             });
         }
 
-        // Verificar que el rol del usuario está en la lista de roles permitidos
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({
                 success: false,
@@ -99,7 +94,6 @@ const authorize = (...roles) => {
             });
         }
 
-        // Usuario autorizado, continuar
         next();
     };
 };

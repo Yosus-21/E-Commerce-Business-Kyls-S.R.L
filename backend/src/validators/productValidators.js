@@ -2,6 +2,7 @@ const { body } = require('express-validator');
 
 /**
  * Validaciones para crear un producto
+ * ✅ Migrado de MongoDB (isMongoId) a MySQL (isInt para IDs numéricos)
  */
 const createProductValidator = [
     body('name')
@@ -30,16 +31,26 @@ const createProductValidator = [
         .isFloat({ min: 0 })
         .withMessage('Precio debe ser mayor o igual a 0'),
 
-    body('category')
-        .notEmpty()
-        .withMessage('Categoría es requerida')
-        .isMongoId()
-        .withMessage('ID de categoría inválido'),
+    // ✅ Acepta tanto 'categoryId' como 'category' (retrocompatible)
+    body(['categoryId', 'category'])
+        .optional()
+        .isInt({ min: 1 })
+        .withMessage('ID de categoría debe ser un número entero positivo'),
 
-    body('brand')
-        .optional({ checkFalsy: true })  // Skip validation si es "", null, undefined
-        .isMongoId()
-        .withMessage('ID de marca inválido'),
+    // Validación custom: al menos uno de los dos debe estar presente
+    body('categoryId').custom((value, { req }) => {
+        const catId = req.body.categoryId || req.body.category;
+        if (!catId) {
+            throw new Error('La categoría es obligatoria');
+        }
+        return true;
+    }),
+
+    // ✅ Acepta tanto 'brandId' como 'brand' (retrocompatible) — OPCIONAL
+    body(['brandId', 'brand'])
+        .optional({ checkFalsy: true })  // Skip si es "", null, undefined, 0
+        .isInt({ min: 1 })
+        .withMessage('ID de marca debe ser un número entero positivo'),
 
     body('stock')
         .notEmpty()
@@ -86,15 +97,17 @@ const updateProductValidator = [
         .isFloat({ min: 0 })
         .withMessage('Precio debe ser mayor o igual a 0'),
 
-    body('category')
+    // ✅ Acepta tanto 'categoryId' como 'category'
+    body(['categoryId', 'category'])
         .optional()
-        .isMongoId()
-        .withMessage('ID de categoría inválido'),
+        .isInt({ min: 1 })
+        .withMessage('ID de categoría debe ser un número entero positivo'),
 
-    body('brand')
-        .optional({ checkFalsy: true })  // Skip validation si es "", null, undefined
-        .isMongoId()
-        .withMessage('ID de marca inválido'),
+    // ✅ Acepta tanto 'brandId' como 'brand' — OPCIONAL
+    body(['brandId', 'brand'])
+        .optional({ checkFalsy: true })
+        .isInt({ min: 1 })
+        .withMessage('ID de marca debe ser un número entero positivo'),
 
     body('stock')
         .optional()

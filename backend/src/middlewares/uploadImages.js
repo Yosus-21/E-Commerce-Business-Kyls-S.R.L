@@ -1,9 +1,40 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 
 // ====================================
-// CONFIGURACIÓN DE STORAGE
+// HELPER: Normalizar ruta de archivo para URLs
+// En Windows, multer genera req.file.path con backslashes (\)
+// Este helper los convierte a forward-slashes (/) para URLs HTTP
 // ====================================
+const normalizeUploadPath = (filePath) => {
+    // Reemplaza backslashes por slashes y asegura que empiece con /
+    // Ej: 'uploads\\products\\img.jpg' → '/uploads/products/img.jpg'
+    return '/' + filePath.replace(/\\/g, '/').replace(/^\//, '');
+};
+
+// Middleware que agrega req.file.url (ruta normalizada) después de cada upload
+const addNormalizedUrl = (req, res, next) => {
+    if (req.file) {
+        req.file.url = normalizeUploadPath(req.file.path);
+    }
+    if (req.files && Array.isArray(req.files)) {
+        req.files = req.files.map(f => ({ ...f, url: normalizeUploadPath(f.path) }));
+    }
+    next();
+};
+
+// Helper para asegurar que los directorios de uploads existan
+const ensureDir = (dirPath) => {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+};
+
+// Crear todas las subcarpetas necesarias al iniciar
+['uploads/products', 'uploads/categories', 'uploads/brands',
+    'uploads/services', 'uploads/hero', 'uploads/partners'].forEach(ensureDir);
+
 
 // Storage para productos (permite múltiples imágenes)
 const productStorage = multer.diskStorage({
@@ -235,5 +266,7 @@ module.exports = {
     uploadServiceImage,
     uploadHeroImage,
     uploadPartnerLogo,
-    handleMulterError
+    handleMulterError,
+    normalizeUploadPath,   // Exportado para uso directo en controladores si hace falta
+    addNormalizedUrl       // Middleware de normalización de rutas
 };

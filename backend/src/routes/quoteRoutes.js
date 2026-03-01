@@ -3,9 +3,9 @@ const router = express.Router();
 const { protect, authorize } = require('../middlewares');
 const {
     generateQuote,
-    getUserQuotes,
+    getMyQuotes,          // ← era getUserQuotes en el router anterior
     getQuote,
-    getQuotePDF,
+    downloadQuotePDF,     // ← era getQuotePDF en el router anterior
     deleteQuote,
     getAllQuotes,
     updateQuoteStatus,
@@ -34,22 +34,22 @@ router.post('/', protect, generateQuote);
 // @route   GET /api/quotes/user
 // @desc    Obtener todas las cotizaciones del usuario autenticado
 // @access  Private
-router.get('/user', protect, getUserQuotes);
+router.get('/user', protect, getMyQuotes);
 
 // @route   PATCH /api/quotes/:id/status
 // @desc    Actualizar estado de cotización (Admin)
 // @access  Private/Admin
 router.patch('/:id/status', protect, authorize('admin'), updateQuoteStatus);
 
+// @route   GET /api/quotes/:id/pdf
+// @desc    Descargar PDF de cotización
+// @access  Private
+router.get('/:id/pdf', protect, downloadQuotePDF);
+
 // @route   GET /api/quotes/:id
 // @desc    Obtener cotización por ID
 // @access  Private
 router.get('/:id', protect, getQuote);
-
-// @route   GET /api/quotes/:id/pdf
-// @desc    Descargar PDF de cotización
-// @access  Private
-router.get('/:id/pdf', protect, getQuotePDF);
 
 // @route   DELETE /api/quotes/:id
 // @desc    Eliminar cotización

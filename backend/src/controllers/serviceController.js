@@ -1,4 +1,4 @@
-const Service = require('../models/Service');
+const { Service } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 const { deleteFile } = require('../utils/fileHelper');
 
@@ -10,15 +10,15 @@ const { deleteFile } = require('../utils/fileHelper');
 exports.getAllServices = asyncHandler(async (req, res, next) => {
     const { isActive } = req.query;
 
-    // Construir filtros
-    const filters = {};
-    if (isActive !== undefined) {
-        filters.isActive = isActive === 'true';
-    } else {
-        filters.isActive = true; // Por defecto solo activos
-    }
+    // Construir cláusula WHERE: por defecto solo activos
+    const where = {
+        isActive: isActive !== undefined ? isActive === 'true' : true
+    };
 
-    const services = await Service.find(filters).sort({ createdAt: -1 });
+    const services = await Service.findAll({
+        where,
+        order: [['createdAt', 'DESC']]
+    });
 
     res.status(200).json({
         success: true,
@@ -34,29 +34,24 @@ exports.getAllServices = asyncHandler(async (req, res, next) => {
  */
 exports.getService = asyncHandler(async (req, res, next) => {
     let service;
+    const param = req.params.id;
 
-    // Intentar buscar por ID primero, luego por slug
-    if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
-        service = await Service.findById(req.params.id);
+    // ID numérico → findByPk; cualquier otro valor → buscar por slug
+    if (!isNaN(param)) {
+        service = await Service.findByPk(param);
     } else {
-        service = await Service.findOne({ slug: req.params.id, isActive: true });
+        service = await Service.findOne({ where: { slug: param, isActive: true } });
     }
 
     if (!service) {
-        return res.status(404).json({
-            success: false,
-            message: 'Servicio no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
     }
 
-    // Incrementar contador de vistas
+    // Incrementar vistas
     service.views += 1;
     await service.save();
 
-    res.status(200).json({
-        success: true,
-        data: service
-    });
+    res.status(200).json({ success: true, data: service });
 });
 
 /**
@@ -67,34 +62,25 @@ exports.getService = asyncHandler(async (req, res, next) => {
 exports.createService = asyncHandler(async (req, res, next) => {
     const { title, description, longDescription, price, features } = req.body;
 
-    // Preparar datos del servicio
-    const serviceData = {
-        title,
-        description,
-        longDescription,
-        price
-    };
+    const serviceData = { title, description, longDescription, price };
 
-    // Si se subió una imagen, agregar la ruta
+    // Imagen subida con Multer
     if (req.file) {
-        serviceData.image = `/uploads/services/${req.file.filename}`;
+        serviceData.image = req.file.url;   // ← ruta normalizada
     }
 
-    // Parsear features si viene como string JSON
-    if (features) {
+    // features es DataTypes.JSON en el modelo.
+    // Puede llegar como string JSON (desde FormData) o como array (desde JSON body).
+    if (features !== undefined) {
         try {
             serviceData.features = typeof features === 'string'
                 ? JSON.parse(features)
                 : features;
-        } catch (error) {
-            return res.status(400).json({
-                success: false,
-                message: 'Formato de características inválido'
-            });
+        } catch {
+            return res.status(400).json({ success: false, message: 'Formato de características inválido' });
         }
     }
 
-    // Crear servicio
     const service = await Service.create(serviceData);
 
     res.status(201).json({
@@ -112,47 +98,34 @@ exports.createService = asyncHandler(async (req, res, next) => {
 exports.updateService = asyncHandler(async (req, res, next) => {
     const { title, description, longDescription, price, features } = req.body;
 
-    // Buscar servicio
-    let service = await Service.findById(req.params.id);
+    const service = await Service.findByPk(req.params.id);
 
     if (!service) {
-        return res.status(404).json({
-            success: false,
-            message: 'Servicio no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
     }
 
-    // Si hay nueva imagen, eliminar la anterior
+    // Gestionar imagen
     if (req.file) {
-        // Eliminar imagen anterior si existe
-        if (service.image) {
-            await deleteFile(service.image);
-        }
-        // Actualizar con nueva imagen
-        service.image = `/uploads/services/${req.file.filename}`;
+        if (service.image) await deleteFile(service.image);
+        service.image = req.file.url;   // ← ruta normalizada
     }
 
-    // Actualizar campos
-    if (title) service.title = title;
+    if (title !== undefined) service.title = title;
     if (description !== undefined) service.description = description;
     if (longDescription !== undefined) service.longDescription = longDescription;
     if (price !== undefined) service.price = price;
 
-    // Actualizar features si se proporcionan
-    if (features) {
+    // features: DataTypes.JSON acepta array directamente
+    if (features !== undefined) {
         try {
             service.features = typeof features === 'string'
                 ? JSON.parse(features)
                 : features;
-        } catch (error) {
-            return res.status(400).json({
-                success: false,
-                message: 'Formato de características inválido'
-            });
+        } catch {
+            return res.status(400).json({ success: false, message: 'Formato de características inválido' });
         }
     }
 
-    // Guardar cambios
     await service.save();
 
     res.status(200).json({
@@ -168,21 +141,14 @@ exports.updateService = asyncHandler(async (req, res, next) => {
  * @access  Private/Admin
  */
 exports.deleteService = asyncHandler(async (req, res, next) => {
-    const service = await Service.findById(req.params.id);
+    const service = await Service.findByPk(req.params.id);
 
     if (!service) {
-        return res.status(404).json({
-            success: false,
-            message: 'Servicio no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
     }
 
-    // Soft delete - marcar como inactivo
     service.isActive = false;
     await service.save();
 
-    res.status(200).json({
-        success: true,
-        message: 'Servicio eliminado exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Servicio eliminado exitosamente' });
 });

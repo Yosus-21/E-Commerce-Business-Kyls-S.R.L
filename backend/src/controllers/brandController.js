@@ -1,14 +1,18 @@
-const Brand = require('../models/Brand');
+const { Op } = require('sequelize');
+const { Brand, Product } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 const { deleteFile } = require('../utils/fileHelper');
 
 /**
- * @desc    Obtener todas las marcas
+ * @desc    Obtener todas las marcas activas
  * @route   GET /api/brands
  * @access  Public
  */
 exports.getAllBrands = asyncHandler(async (req, res, next) => {
-    const brands = await Brand.find({ isActive: true }).sort({ name: 1 });
+    const brands = await Brand.findAll({
+        where: { isActive: true },
+        order: [['name', 'ASC']]
+    });
 
     res.status(200).json({
         success: true,
@@ -24,25 +28,21 @@ exports.getAllBrands = asyncHandler(async (req, res, next) => {
  */
 exports.getBrand = asyncHandler(async (req, res, next) => {
     let brand;
+    const param = req.params.id;
 
-    // Intentar buscar por ID primero, luego por slug
-    if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
-        brand = await Brand.findById(req.params.id);
+    // En MySQL los IDs son enteros, no ObjectIds hexadecimales.
+    // Si el parámetro es numérico → buscar por PK; si no → buscar por slug.
+    if (!isNaN(param)) {
+        brand = await Brand.findByPk(param);
     } else {
-        brand = await Brand.findOne({ slug: req.params.id, isActive: true });
+        brand = await Brand.findOne({ where: { slug: param, isActive: true } });
     }
 
     if (!brand) {
-        return res.status(404).json({
-            success: false,
-            message: 'Marca no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Marca no encontrada' });
     }
 
-    res.status(200).json({
-        success: true,
-        data: brand
-    });
+    res.status(200).json({ success: true, data: brand });
 });
 
 /**
@@ -53,19 +53,14 @@ exports.getBrand = asyncHandler(async (req, res, next) => {
 exports.createBrand = asyncHandler(async (req, res, next) => {
     const { name, description } = req.body;
 
-    // Validar que se haya subido una imagen
     if (!req.file) {
-        return res.status(400).json({
-            success: false,
-            message: 'La imagen de la marca es requerida'
-        });
+        return res.status(400).json({ success: false, message: 'La imagen de la marca es requerida' });
     }
 
-    // Crear marca
     const brand = await Brand.create({
         name,
         description,
-        image: `/uploads/brands/${req.file.filename}`
+        logo: req.file.url   // ← ruta normalizada por addNormalizedUrl middleware
     });
 
     res.status(201).json({
@@ -83,31 +78,21 @@ exports.createBrand = asyncHandler(async (req, res, next) => {
 exports.updateBrand = asyncHandler(async (req, res, next) => {
     const { name, description } = req.body;
 
-    // Buscar marca
-    let brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findByPk(req.params.id);
 
     if (!brand) {
-        return res.status(404).json({
-            success: false,
-            message: 'Marca no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Marca no encontrada' });
     }
 
-    // Si hay nueva imagen, eliminar la anterior
+    // Gestionar imagen: eliminar la anterior si se sube una nueva
     if (req.file) {
-        // Eliminar imagen anterior si existe
-        if (brand.image) {
-            await deleteFile(brand.image);
-        }
-        // Actualizar con nueva imagen
-        brand.image = `/uploads/brands/${req.file.filename}`;
+        if (brand.logo) await deleteFile(brand.logo);
+        brand.logo = req.file.url;   // ← ruta normalizada
     }
 
-    // Actualizar campos
-    if (name) brand.name = name;
+    if (name !== undefined) brand.name = name;
     if (description !== undefined) brand.description = description;
 
-    // Guardar cambios
     await brand.save();
 
     res.status(200).json({
@@ -123,20 +108,14 @@ exports.updateBrand = asyncHandler(async (req, res, next) => {
  * @access  Private/Admin
  */
 exports.deleteBrand = asyncHandler(async (req, res, next) => {
-    const brand = await Brand.findById(req.params.id);
+    const brand = await Brand.findByPk(req.params.id);
 
     if (!brand) {
-        return res.status(404).json({
-            success: false,
-            message: 'Marca no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Marca no encontrada' });
     }
 
-    // Verificar si tiene productos asociados
-    const Product = require('../models/Product');
-    const productCount = await Product.countDocuments({
-        brand: req.params.id
-    });
+    // Verificar productos activos asociados
+    const productCount = await Product.count({ where: { brandId: req.params.id, isActive: true } });
 
     if (productCount > 0) {
         return res.status(400).json({
@@ -145,12 +124,8 @@ exports.deleteBrand = asyncHandler(async (req, res, next) => {
         });
     }
 
-    // Soft delete - marcar como inactiva
     brand.isActive = false;
     await brand.save();
 
-    res.status(200).json({
-        success: true,
-        message: 'Marca eliminada exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Marca eliminada exitosamente' });
 });

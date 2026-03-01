@@ -1,6 +1,7 @@
 require('dotenv').config();
 const app = require('./app');
-const connectDB = require('./config/database');
+const { connectDB } = require('./config/database');
+const { syncModels } = require('./models/index');
 
 // Configurar puerto
 const PORT = process.env.PORT || 5000;
@@ -8,10 +9,13 @@ const PORT = process.env.PORT || 5000;
 // Función para iniciar el servidor
 const startServer = async () => {
     try {
-        // 1. Conectar a la base de datos
+        // 1. Conectar a MySQL con Sequelize
         await connectDB();
 
-        // 2. Iniciar servidor Express
+        // 2. Sincronizar modelos (crear/actualizar tablas en MySQL)
+        await syncModels();
+
+        // 3. Iniciar servidor Express
         const server = app.listen(PORT, () => {
             console.log('='.repeat(50));
             console.log(`🚀 Servidor corriendo en modo ${process.env.NODE_ENV || 'development'}`);

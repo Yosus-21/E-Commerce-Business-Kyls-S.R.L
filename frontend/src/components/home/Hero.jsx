@@ -6,7 +6,7 @@ import 'swiper/css/pagination';
 import 'swiper/css/navigation';
 import 'swiper/css/effect-fade';
 import * as featuredImageService from '../../services/featuredImageService';
-import { getProductImage } from '../../utils/imageHelper';
+import { getImageUrl } from '../../utils/imageHelper';
 
 /**
  * Hero Component
@@ -71,10 +71,10 @@ const Hero = () => {
                 className="w-full h-[400px] sm:h-[500px] md:h-[600px] lg:h-[750px] xl:h-[850px]"
             >
                 {banners.map((banner) => (
-                    <SwiperSlide key={banner._id}>
+                    <SwiperSlide key={banner.id || banner._id}>
                         <img
-                            src={getProductImage(banner.image)}
-                            alt={`Banner promocional ${banner._id}`}
+                            src={getImageUrl(banner.imageUrl)}
+                            alt={banner.title || `Banner promocional ${banner.id}`}
                             className="w-full h-full object-contain bg-gray-100"
                         />
                     </SwiperSlide>

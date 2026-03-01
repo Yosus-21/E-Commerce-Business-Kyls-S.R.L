@@ -1,5 +1,10 @@
-const User = require('../models/User');
+const { Op } = require('sequelize');
+const { User, UserAddress } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
+
+// ====================================
+// PERFIL PROPIO
+// ====================================
 
 /**
  * @desc    Obtener perfil del usuario actual
@@ -7,8 +12,10 @@ const asyncHandler = require('../utils/asyncHandler');
  * @access  Private
  */
 exports.getProfile = asyncHandler(async (req, res) => {
-    // Buscar usuario SIN password para prevenir fuga de datos
-    const user = await User.findById(req.user._id).select('-password');
+    // El defaultScope ya excluye password; incluimos las direcciones
+    const user = await User.findByPk(req.user.id, {
+        include: [{ association: 'addresses' }]
+    });
 
     res.status(200).json({
         success: true,
@@ -24,29 +31,26 @@ exports.getProfile = asyncHandler(async (req, res) => {
 exports.updateProfile = asyncHandler(async (req, res) => {
     const { name, phone } = req.body;
 
-    // Buscar usuario
-    const user = await User.findById(req.user._id);
+    const user = await User.findByPk(req.user.id);
 
     if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
     }
 
-    // Actualizar campos permitidos
+    // Actualizar solo los campos permitidos
     if (name) user.name = name;
     if (phone !== undefined) user.phone = phone;
 
-    // Guardar cambios
     await user.save();
 
-    // Obtener usuario actualizado SIN password
-    const updatedUser = await User.findById(user._id).select('-password');
+    // Recargar sin password (defaultScope)
+    const updated = await User.findByPk(user.id, {
+        include: [{ association: 'addresses' }]
+    });
 
     res.status(200).json({
         success: true,
-        data: updatedUser,
+        data: updated,
         message: 'Perfil actualizado exitosamente'
     });
 });
@@ -59,41 +63,28 @@ exports.updateProfile = asyncHandler(async (req, res) => {
 exports.updatePassword = asyncHandler(async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
-    // Buscar usuario con password (select: false por defecto)
-    const user = await User.findById(req.user._id).select('+password');
+    // Necesitamos el password → scope withPassword
+    const user = await User.scope('withPassword').findByPk(req.user.id);
 
     if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
     }
 
-    // ====================================
-    // VERIFICAR CONTRASEÑA ACTUAL
-    // ====================================
     const isMatch = await user.matchPassword(currentPassword);
-
     if (!isMatch) {
-        return res.status(401).json({
-            success: false,
-            message: 'Contraseña actual incorrecta'
-        });
+        return res.status(401).json({ success: false, message: 'Contraseña actual incorrecta' });
     }
 
-    // ====================================
-    // ACTUALIZAR CONTRASEÑA
-    // ====================================
+    // Asignar nueva contraseña (el hook beforeSave la hasheará)
     user.password = newPassword;
-
-    // Guardar (el middleware pre-save hasheará automáticamente)
     await user.save();
 
-    res.status(200).json({
-        success: true,
-        message: 'Contraseña actualizada exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Contraseña actualizada exitosamente' });
 });
+
+// ====================================
+// CRUD DE DIRECCIONES (UserAddress)
+// ====================================
 
 /**
  * @desc    Agregar nueva dirección
@@ -103,27 +94,18 @@ exports.updatePassword = asyncHandler(async (req, res) => {
 exports.addAddress = asyncHandler(async (req, res) => {
     const { name, street, city, state, zipCode, phone, isDefault } = req.body;
 
-    // Buscar usuario
-    const user = await User.findById(req.user._id);
-
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
-    }
-
-    // ====================================
-    // SI isDefault es true, poner todas las demás en false
-    // ====================================
+    // Si la nueva dirección es la predeterminada,
+    // poner todas las existentes en isDefault = false
     if (isDefault === true) {
-        user.addresses.forEach(address => {
-            address.isDefault = false;
-        });
+        await UserAddress.update(
+            { isDefault: false },
+            { where: { userId: req.user.id } }
+        );
     }
 
-    // Agregar nueva dirección
-    user.addresses.push({
+    // Crear la nueva dirección vinculada al usuario
+    const address = await UserAddress.create({
+        userId: req.user.id,
         name,
         street,
         city,
@@ -133,15 +115,14 @@ exports.addAddress = asyncHandler(async (req, res) => {
         isDefault: isDefault || false
     });
 
-    // Guardar cambios
-    await user.save();
-
-    // Obtener usuario actualizado SIN password
-    const updatedUser = await User.findById(user._id).select('-password');
+    // Retornar usuario completo con todas sus direcciones
+    const user = await User.findByPk(req.user.id, {
+        include: [{ association: 'addresses' }]
+    });
 
     res.status(201).json({
         success: true,
-        data: updatedUser,
+        data: user,
         message: 'Dirección agregada exitosamente'
     });
 });
@@ -155,55 +136,41 @@ exports.updateAddress = asyncHandler(async (req, res) => {
     const { addressId } = req.params;
     const { name, street, city, state, zipCode, phone, isDefault } = req.body;
 
-    // Buscar usuario
-    const user = await User.findById(req.user._id);
-
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
-    }
-
-    // Encontrar dirección por _id
-    const address = user.addresses.id(addressId);
+    // Buscar la dirección verificando que pertenezca al usuario actual
+    const address = await UserAddress.findOne({
+        where: { id: addressId, userId: req.user.id }
+    });
 
     if (!address) {
-        return res.status(404).json({
-            success: false,
-            message: 'Dirección no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Dirección no encontrada' });
     }
 
-    // ====================================
-    // SI isDefault es true, poner todas las demás en false
-    // ====================================
+    // Si se marca como predeterminada, quitar ese flag a las demás
     if (isDefault === true) {
-        user.addresses.forEach(addr => {
-            if (addr._id.toString() !== addressId) {
-                addr.isDefault = false;
-            }
-        });
+        await UserAddress.update(
+            { isDefault: false },
+            { where: { userId: req.user.id, id: { [Op.ne]: addressId } } }
+        );
     }
 
-    // Actualizar campos
-    if (name) address.name = name;
-    if (street) address.street = street;
-    if (city) address.city = city;
-    if (state) address.state = state;
+    // Actualizar solo los campos enviados
+    if (name !== undefined) address.name = name;
+    if (street !== undefined) address.street = street;
+    if (city !== undefined) address.city = city;
+    if (state !== undefined) address.state = state;
     if (zipCode !== undefined) address.zipCode = zipCode;
-    if (phone) address.phone = phone;
+    if (phone !== undefined) address.phone = phone;
     if (isDefault !== undefined) address.isDefault = isDefault;
 
-    // Guardar cambios
-    await user.save();
+    await address.save();
 
-    // Obtener usuario actualizado SIN password
-    const updatedUser = await User.findById(user._id).select('-password');
+    const user = await User.findByPk(req.user.id, {
+        include: [{ association: 'addresses' }]
+    });
 
     res.status(200).json({
         success: true,
-        data: updatedUser,
+        data: user,
         message: 'Dirección actualizada exitosamente'
     });
 });
@@ -216,30 +183,24 @@ exports.updateAddress = asyncHandler(async (req, res) => {
 exports.deleteAddress = asyncHandler(async (req, res) => {
     const { addressId } = req.params;
 
-    // Buscar usuario
-    const user = await User.findById(req.user._id);
+    // Verificar que la dirección existe y pertenece al usuario
+    const address = await UserAddress.findOne({
+        where: { id: addressId, userId: req.user.id }
+    });
 
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
+    if (!address) {
+        return res.status(404).json({ success: false, message: 'Dirección no encontrada' });
     }
 
-    // Filtrar addresses para eliminar la dirección
-    user.addresses = user.addresses.filter(
-        address => address._id.toString() !== addressId
-    );
+    await address.destroy();
 
-    // Guardar cambios
-    await user.save();
-
-    // Obtener usuario actualizado SIN password
-    const updatedUser = await User.findById(user._id).select('-password');
+    const user = await User.findByPk(req.user.id, {
+        include: [{ association: 'addresses' }]
+    });
 
     res.status(200).json({
         success: true,
-        data: updatedUser,
+        data: user,
         message: 'Dirección eliminada exitosamente'
     });
 });
@@ -258,34 +219,32 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
-    const skip = (pageNum - 1) * limitNum;
+    const offset = (pageNum - 1) * limitNum;
 
-    // Construir filtros de búsqueda
-    const filters = {};
+    // Construir cláusula WHERE dinámica
+    const where = { isActive: true };
     if (search) {
-        filters.$or = [
-            { name: { $regex: search, $options: 'i' } },
-            { email: { $regex: search, $options: 'i' } }
+        where[Op.or] = [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } }
         ];
     }
 
-    // Buscar usuarios (sin password)
-    const users = await User.find(filters)
-        .select('-password')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum);
-
-    // Contar total
-    const total = await User.countDocuments(filters);
+    const { count, rows: users } = await User.findAndCountAll({
+        where,
+        // defaultScope excluye password; no necesitamos attributes adicionales
+        order: [['createdAt', 'DESC']],
+        limit: limitNum,
+        offset
+    });
 
     res.status(200).json({
         success: true,
         data: users,
         pagination: {
             currentPage: pageNum,
-            totalPages: Math.ceil(total / limitNum),
-            totalUsers: total,
+            totalPages: Math.ceil(count / limitNum),
+            totalUsers: count,
             limit: limitNum
         }
     });
@@ -297,19 +256,15 @@ exports.getAllUsers = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.getUserById = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findByPk(req.params.id, {
+        include: [{ association: 'addresses' }]
+    });
 
     if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
     }
 
-    res.status(200).json({
-        success: true,
-        data: user
-    });
+    res.status(200).json({ success: true, data: user });
 });
 
 /**
@@ -320,7 +275,6 @@ exports.getUserById = asyncHandler(async (req, res) => {
 exports.updateUserRole = asyncHandler(async (req, res) => {
     const { role } = req.body;
 
-    // Validar rol
     if (!['user', 'admin'].includes(role)) {
         return res.status(400).json({
             success: false,
@@ -328,17 +282,14 @@ exports.updateUserRole = asyncHandler(async (req, res) => {
         });
     }
 
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
 
     if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
     }
 
     // Prevenir que el admin se quite sus propios privilegios
-    if (user._id.toString() === req.user._id.toString() && role === 'user') {
+    if (user.id === req.user.id && role === 'user') {
         return res.status(400).json({
             success: false,
             message: 'No puedes quitarte tus propios privilegios de administrador'
@@ -361,27 +312,23 @@ exports.updateUserRole = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.deleteUser = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id);
+    const user = await User.findByPk(req.params.id);
 
     if (!user) {
-        return res.status(404).json({
-            success: false,
-            message: 'Usuario no encontrado'
-        });
+        return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
     }
 
     // Prevenir que el admin se elimine a sí mismo
-    if (user._id.toString() === req.user._id.toString()) {
+    if (user.id === req.user.id) {
         return res.status(400).json({
             success: false,
             message: 'No puedes eliminar tu propia cuenta'
         });
     }
 
-    await user.deleteOne();
+    // Soft delete: cambiar a inactivo para evitar errores de Foreign Keys (ej: Quotes)
+    user.isActive = false;
+    await user.save();
 
-    res.status(200).json({
-        success: true,
-        message: 'Usuario eliminado exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Usuario eliminado exitosamente' });
 });

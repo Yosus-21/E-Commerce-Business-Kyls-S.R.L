@@ -1,4 +1,4 @@
-const FeaturedImage = require('../models/FeaturedImage');
+const { FeaturedImage } = require('../models/index');
 const asyncHandler = require('../utils/asyncHandler');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +9,11 @@ const path = require('path');
  * @access  Public
  */
 exports.getActiveImages = asyncHandler(async (req, res) => {
-    const images = await FeaturedImage.getActive();
+    // Reemplaza el método estático FeaturedImage.getActive() de Mongoose
+    const images = await FeaturedImage.findAll({
+        where: { isActive: true },
+        order: [['order', 'ASC'], ['createdAt', 'DESC']]
+    });
 
     res.status(200).json({
         success: true,
@@ -19,12 +23,15 @@ exports.getActiveImages = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Obtener todas las imágenes (admin)
+ * @desc    Obtener todas las imágenes (Admin)
  * @route   GET /api/featured-images/all
  * @access  Private/Admin
  */
 exports.getAllImages = asyncHandler(async (req, res) => {
-    const images = await FeaturedImage.getAll();
+    // Reemplaza FeaturedImage.getAll() de Mongoose
+    const images = await FeaturedImage.findAll({
+        order: [['order', 'ASC'], ['createdAt', 'DESC']]
+    });
 
     res.status(200).json({
         success: true,
@@ -39,19 +46,14 @@ exports.getAllImages = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.getImageById = asyncHandler(async (req, res) => {
-    const image = await FeaturedImage.findById(req.params.id);
+    // findById(id) → findByPk(id)
+    const image = await FeaturedImage.findByPk(req.params.id);
 
     if (!image) {
-        return res.status(404).json({
-            success: false,
-            message: 'Imagen no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Imagen no encontrada' });
     }
 
-    res.status(200).json({
-        success: true,
-        data: image
-    });
+    res.status(200).json({ success: true, data: image });
 });
 
 /**
@@ -60,20 +62,15 @@ exports.getImageById = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.createImage = asyncHandler(async (req, res) => {
-    // Validar que se subió una imagen
     if (!req.file) {
-        return res.status(400).json({
-            success: false,
-            message: 'Por favor sube una imagen'
-        });
+        return res.status(400).json({ success: false, message: 'Por favor sube una imagen' });
     }
 
-    // Obtener path relativo de la imagen
-    const imagePath = `hero/${req.file.filename}`;
-
-    // Crear documento
     const image = await FeaturedImage.create({
-        image: imagePath,
+        title: req.body.title || null,
+        subtitle: req.body.subtitle || null,
+        imageUrl: req.file.url,     // ← ruta normalizada
+        linkUrl: req.body.linkUrl || null,
         order: req.body.order || 0,
         isActive: req.body.isActive !== undefined ? req.body.isActive : true
     });
@@ -91,31 +88,29 @@ exports.createImage = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.updateImage = asyncHandler(async (req, res) => {
-    let image = await FeaturedImage.findById(req.params.id);
+    // findByIdAndUpdate() se reemplaza por findByPk() + asignación + save()
+    const image = await FeaturedImage.findByPk(req.params.id);
 
     if (!image) {
-        return res.status(404).json({
-            success: false,
-            message: 'Imagen no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Imagen no encontrada' });
     }
 
-    // Solo actualizar orden e isActive (no la imagen en sí)
-    const updateData = {};
+    if (req.body.order !== undefined) image.order = req.body.order;
+    if (req.body.isActive !== undefined) image.isActive = req.body.isActive;
+    if (req.body.title !== undefined) image.title = req.body.title;
+    if (req.body.subtitle !== undefined) image.subtitle = req.body.subtitle;
+    if (req.body.linkUrl !== undefined) image.linkUrl = req.body.linkUrl;
 
-    if (req.body.order !== undefined) {
-        updateData.order = req.body.order;
+    // Si se sube nueva imagen, reemplazar el archivo anterior
+    if (req.file) {
+        if (image.imageUrl) {
+            const oldPath = path.join(process.cwd(), image.imageUrl);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+        image.imageUrl = req.file.url;   // ← ruta normalizada
     }
 
-    if (req.body.isActive !== undefined) {
-        updateData.isActive = req.body.isActive;
-    }
-
-    image = await FeaturedImage.findByIdAndUpdate(
-        req.params.id,
-        updateData,
-        { new: true, runValidators: true }
-    );
+    await image.save();
 
     res.status(200).json({
         success: true,
@@ -130,32 +125,23 @@ exports.updateImage = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.deleteImage = asyncHandler(async (req, res) => {
-    const image = await FeaturedImage.findById(req.params.id);
+    const image = await FeaturedImage.findByPk(req.params.id);
 
     if (!image) {
-        return res.status(404).json({
-            success: false,
-            message: 'Imagen no encontrada'
-        });
+        return res.status(404).json({ success: false, message: 'Imagen no encontrada' });
     }
 
-    // Eliminar archivo físico
-    const imagePath = path.join(__dirname, '../../uploads', image.image);
-
-    if (fs.existsSync(imagePath)) {
-        try {
-            fs.unlinkSync(imagePath);
-        } catch (error) {
-            console.error('Error al eliminar archivo físico:', error);
-            // Continuar con la eliminación del documento aunque falle el archivo
+    // Eliminar archivo físico del disco
+    if (image.imageUrl) {
+        const absPath = path.join(process.cwd(), image.imageUrl);
+        if (fs.existsSync(absPath)) {
+            try { fs.unlinkSync(absPath); }
+            catch (err) { console.error('Error al eliminar archivo físico:', err.message); }
         }
     }
 
-    // Eliminar documento de la base de datos
-    await image.deleteOne();
+    // image.deleteOne() → image.destroy()
+    await image.destroy();
 
-    res.status(200).json({
-        success: true,
-        message: 'Imagen eliminada exitosamente'
-    });
+    res.status(200).json({ success: true, message: 'Imagen eliminada exitosamente' });
 });

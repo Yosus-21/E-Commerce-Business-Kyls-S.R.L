@@ -177,10 +177,10 @@ const CartPage = () => {
                     {/* Columna Izquierda - Lista de Items */}
                     <div className="lg:col-span-2 space-y-4">
                         {cart.items.map((item) => {
-                            // Obtener ID del item (puede ser _id o id)
-                            const itemId = item._id || item.id;
+                            // ✅ MySQL: item.id es entero, product.id es entero
+                            const itemId = item.id;
                             const product = item.product;
-                            const productId = product._id || product.id;
+                            const productId = product?.id;
 
                             return (
                                 <Card key={itemId} hoverable>
@@ -206,10 +206,10 @@ const CartPage = () => {
                                                 </p>
                                             )}
                                             <p className="text-lg font-bold text-primary-700">
-                                                Bs. {item.price?.toFixed(2)}
+                                                Bs. {Number(item.price || 0).toFixed(2)}
                                             </p>
                                             <p className="text-sm text-secondary-600 mt-1">
-                                                Subtotal: Bs. {(item.price * item.quantity).toFixed(2)}
+                                                Subtotal: Bs. {(Number(item.price || 0) * item.quantity).toFixed(2)}
                                             </p>
                                         </div>
 
