@@ -36,12 +36,9 @@ CartItem.init(
     {
         sequelize,
         modelName: 'CartItem',
-        tableName: 'CartItems',
-        timestamps: true,
-        indexes: [
-            { fields: ['cartId'] },
-            { fields: ['productId'] }
-        ]
+        tableName: 'cart_items',
+        underscored: true,
+        timestamps: true
     }
 );
 

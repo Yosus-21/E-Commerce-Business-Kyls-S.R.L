@@ -103,7 +103,8 @@ Quote.init(
     {
         sequelize,
         modelName: 'Quote',
-        tableName: 'Quotes',
+        tableName: 'quotes',
+        underscored: true,
         timestamps: true,
         getterMethods: {
             isExpired() {
@@ -115,14 +116,7 @@ Quote.init(
                 const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
                 return days > 0 ? days : 0;
             }
-        },
-        indexes: [
-            { fields: ['quoteNumber'], unique: true },
-            { fields: ['userId'] },
-            { fields: ['status'] },
-            { fields: ['expiresAt'] },
-            { fields: ['createdAt'] }
-        ]
+        }
     }
 );
 

@@ -114,22 +114,60 @@ const featuredImageRoutes = require('./routes/featuredImageRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 
-// Ruta de prueba
-app.get('/', (req, res) => {
+// Ruta de prueba (Soporte para cPanel /api)
+const welcomeMsg = (req, res) => {
     res.json({
         success: true,
-        message: 'API de Business Kyla SRL - E-commerce',
+        message: 'API de Business Kyla SRL - ¡LISTA Y CONECTADA!',
         version: '1.0.0',
-        endpoints: {
-            auth: '/api/auth',
-            categories: '/api/categories',
-            products: '/api/products',
-            cart: '/api/cart',
-            orders: '/api/orders',
-            users: '/api/users'
-        }
+        database: 'PostgreSQL Conectado',
+        admin_path: '/api/auth/login'
     });
-});
+};
+
+app.get('/', welcomeMsg);
+app.get('/api', welcomeMsg); // Soporte extra para cPanel
+
+// ====================================
+// 🛠️ RUTA DE INICIALIZACIÓN (TEMPORAL)
+// ====================================
+// Esta ruta crea las tablas y el admin inicial si la terminal está bloqueada.
+/*app.get('/api/init-db', async (req, res) => {
+    try {
+        const { syncModels, User } = require('./models/index');
+
+        // 1. Sincronizar tablas (crear si no existen)
+        // Usamos { alter: true } para que funcione incluso si el modo es production
+        const { sequelize } = require('./config/database');
+        await sequelize.sync({ alter: true });
+
+        // 2. Crear admin inicial
+        const ADMIN_DATA = {
+            name: 'Admin Kyla',
+            email: 'admin@businesskyla.com',
+            password: 'admin123',
+            role: 'admin',
+            isActive: true
+        };
+
+        const [user, created] = await User.findOrCreate({
+            where: { email: ADMIN_DATA.email },
+            defaults: ADMIN_DATA
+        });
+
+        res.json({
+            success: true,
+            message: 'Base de datos inicializada correctamente',
+            admin_created: created,
+            detail: created ? 'Usuario administrador creado' : 'El usuario ya existía'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});*/
 
 // Montar rutas de la API
 app.use('/api/health', healthRoutes); // Health check (DEBE ir primero - sin rate limit)

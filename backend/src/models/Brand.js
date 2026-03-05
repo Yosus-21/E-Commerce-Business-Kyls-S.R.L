@@ -40,12 +40,9 @@ Brand.init(
     {
         sequelize,
         modelName: 'Brand',
-        tableName: 'Brands',
-        timestamps: true,
-        indexes: [
-            { fields: ['slug'], unique: true },
-            { fields: ['isActive'] }
-        ]
+        tableName: 'brands',
+        underscored: true,
+        timestamps: true
     }
 );
 

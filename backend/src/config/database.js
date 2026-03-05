@@ -10,7 +10,7 @@ const sequelize = new Sequelize(
     {
         host: process.env.DB_HOST || 'localhost',
         port: process.env.DB_PORT || 3306,
-        dialect: 'mysql',
+        dialect: 'postgres',
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
         pool: {
             max: 10,
@@ -21,8 +21,8 @@ const sequelize = new Sequelize(
         define: {
             // Usar timestamps automáticos (createdAt, updatedAt) en todos los modelos
             timestamps: true,
-            // Evitar que Sequelize pluralice los nombres de tablas de forma extraña
-            underscored: false
+            // Postgres recommendation: variables y nombres de tablas en snake_case
+            underscored: true
         }
     }
 );
@@ -33,15 +33,15 @@ const sequelize = new Sequelize(
 const connectDB = async () => {
     try {
         await sequelize.authenticate();
-        console.log('✅ MySQL conectado exitosamente con Sequelize');
+        console.log('✅ PostgreSQL conectado exitosamente con Sequelize');
 
         // En modo desarrollo, sincronizar modelos (alter: true = actualizar columnas sin borrar datos)
         // Los modelos se sincronizan desde src/models/index.js
         if (process.env.NODE_ENV !== 'production') {
-            console.log('🔄 Sincronizando modelos con MySQL...');
+            console.log('🔄 Sincronizando modelos con PostgreSQL...');
         }
     } catch (error) {
-        console.error('❌ Error al conectar con MySQL:', error.message);
+        console.error('❌ Error al conectar con PostgreSQL:', error.message);
         process.exit(1);
     }
 };

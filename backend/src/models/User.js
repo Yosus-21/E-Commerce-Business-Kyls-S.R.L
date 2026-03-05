@@ -108,7 +108,8 @@ User.init(
     {
         sequelize,
         modelName: 'User',
-        tableName: 'Users',
+        tableName: 'users',
+        underscored: true,
         timestamps: true,
         defaultScope: {
             // Por defecto excluir password de todas las queries
@@ -125,11 +126,7 @@ User.init(
                     'resetPasswordExpire', 'createdAt', 'updatedAt'
                 ]
             }
-        },
-        indexes: [
-            { fields: ['email'], unique: true },
-            { fields: ['role'] }
-        ]
+        }
     }
 );
 

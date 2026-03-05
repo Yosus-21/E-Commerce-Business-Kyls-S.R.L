@@ -36,17 +36,18 @@ FeaturedImage.init(
         isActive: {
             type: DataTypes.BOOLEAN,
             defaultValue: true
+        },
+        productId: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         }
     },
     {
         sequelize,
         modelName: 'FeaturedImage',
-        tableName: 'FeaturedImages',
-        timestamps: true,
-        indexes: [
-            { fields: ['isActive'] },
-            { fields: ['order'] }
-        ]
+        tableName: 'featured_images',
+        underscored: true,
+        timestamps: true
     }
 );
 

@@ -41,12 +41,9 @@ Category.init(
     {
         sequelize,
         modelName: 'Category',
-        tableName: 'Categories',
-        timestamps: true,
-        indexes: [
-            { fields: ['slug'], unique: true },
-            { fields: ['isActive'] }
-        ]
+        tableName: 'categories',
+        underscored: true,
+        timestamps: true
     }
 );
 

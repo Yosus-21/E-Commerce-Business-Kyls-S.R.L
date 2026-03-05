@@ -68,14 +68,14 @@ const Hero = () => {
                 navigation={true}
                 loop={true}
                 speed={1000}
-                className="w-full h-[400px] sm:h-[500px] md:h-[600px] lg:h-[750px] xl:h-[850px]"
+                className="w-full aspect-[16/9] sm:aspect-[21/9] md:h-[660px] lg:h-[820px] xl:h-[940px]"
             >
                 {banners.map((banner) => (
                     <SwiperSlide key={banner.id || banner._id}>
                         <img
                             src={getImageUrl(banner.imageUrl)}
                             alt={banner.title || `Banner promocional ${banner.id}`}
-                            className="w-full h-full object-contain bg-gray-100"
+                            className="w-full h-full object-cover"
                         />
                     </SwiperSlide>
                 ))}

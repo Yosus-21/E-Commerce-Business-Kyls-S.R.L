@@ -32,83 +32,83 @@ const Partner = require('./Partner');
 // --- Usuario y Direcciones ---
 // Un usuario tiene muchas direcciones
 User.hasMany(UserAddress, {
-    foreignKey: { name: 'userId', allowNull: false },
+    foreignKey: 'userId',
     as: 'addresses',
     onDelete: 'CASCADE'
 });
 UserAddress.belongsTo(User, {
-    foreignKey: { name: 'userId', allowNull: false },
+    foreignKey: 'userId',
     as: 'user'
 });
 
 // --- Usuario y Carrito ---
 // Un usuario tiene un único carrito (1:1)
 User.hasOne(Cart, {
-    foreignKey: { name: 'userId', allowNull: false },
+    foreignKey: 'userId',
     as: 'cart',
     onDelete: 'CASCADE'
 });
 Cart.belongsTo(User, {
-    foreignKey: { name: 'userId', allowNull: false },
+    foreignKey: 'userId',
     as: 'user'
 });
 
 // --- Usuario y Cotizaciones ---
 // Un usuario puede tener muchas cotizaciones
 User.hasMany(Quote, {
-    foreignKey: { name: 'userId', allowNull: false },
+    foreignKey: 'userId',
     as: 'quotes',
     onDelete: 'RESTRICT' // No eliminar cotizaciones si se borra el usuario
 });
 Quote.belongsTo(User, {
-    foreignKey: { name: 'userId', allowNull: false },
+    foreignKey: 'userId',
     as: 'user'
 });
 
 // --- Categoría (auto-referencia para subcategorías) ---
 Category.hasMany(Category, {
-    foreignKey: { name: 'parentId', allowNull: true },
+    foreignKey: 'parentId',
     as: 'children',
     onDelete: 'SET NULL'
 });
 Category.belongsTo(Category, {
-    foreignKey: { name: 'parentId', allowNull: true },
+    foreignKey: 'parentId',
     as: 'parent'
 });
 
 // --- Categoría y Productos ---
 // Una categoría puede tener muchos productos
 Category.hasMany(Product, {
-    foreignKey: { name: 'categoryId', allowNull: false },
+    foreignKey: 'categoryId',
     as: 'products',
     onDelete: 'RESTRICT'
 });
 Product.belongsTo(Category, {
-    foreignKey: { name: 'categoryId', allowNull: false },
+    foreignKey: 'categoryId',
     as: 'category'
 });
 
 // --- Marca y Productos ---
 // Una marca puede tener muchos productos (opcional)
 Brand.hasMany(Product, {
-    foreignKey: { name: 'brandId', allowNull: true },
+    foreignKey: 'brandId',
     as: 'products',
     onDelete: 'SET NULL'
 });
 Product.belongsTo(Brand, {
-    foreignKey: { name: 'brandId', allowNull: true },
+    foreignKey: 'brandId',
     as: 'brand'
 });
 
 // --- Carrito e Items ---
 // Un carrito tiene muchos items
 Cart.hasMany(CartItem, {
-    foreignKey: { name: 'cartId', allowNull: false },
+    foreignKey: 'cartId',
     as: 'CartItems',
     onDelete: 'CASCADE'
 });
 CartItem.belongsTo(Cart, {
-    foreignKey: { name: 'cartId', allowNull: false },
+    foreignKey: 'cartId',
     as: 'cart'
 });
 
@@ -116,37 +116,70 @@ CartItem.belongsTo(Cart, {
 // ✅ SET NULL (no CASCADE): si se elimina el producto, el CartItem queda con productId=null
 // en lugar de desaparecer — el controlador filtrará los items sin producto válido
 Product.hasMany(CartItem, {
-    foreignKey: { name: 'productId', allowNull: true },  // allowNull:true para SET NULL
+    foreignKey: 'productId',  // allowNull:true para SET NULL
     as: 'cartItems',
     onDelete: 'SET NULL'
 });
 CartItem.belongsTo(Product, {
-    foreignKey: { name: 'productId', allowNull: true },
+    foreignKey: 'productId',
     as: 'product'
 });
 
 // --- Cotización e Items ---
 // Una cotización tiene muchos items
 Quote.hasMany(QuoteItem, {
-    foreignKey: { name: 'quoteId', allowNull: false },
+    foreignKey: 'quoteId',
     as: 'items',
     onDelete: 'CASCADE'
 });
 QuoteItem.belongsTo(Quote, {
-    foreignKey: { name: 'quoteId', allowNull: false },
+    foreignKey: 'quoteId',
     as: 'quote'
 });
 
 // --- QuoteItem y Producto ---
 // Cada item de cotización referencia un producto (nullable: puede haberse eliminado)
 Product.hasMany(QuoteItem, {
-    foreignKey: { name: 'productId', allowNull: true },
+    foreignKey: 'productId',
     as: 'quoteItems',
     onDelete: 'SET NULL'
 });
 QuoteItem.belongsTo(Product, {
-    foreignKey: { name: 'productId', allowNull: true },
+    foreignKey: 'productId',
     as: 'product'
+});
+
+// --- Categoría y Servicios ---
+Category.hasMany(Service, {
+    foreignKey: 'categoryId',
+    as: 'services',
+    onDelete: 'RESTRICT'
+});
+Service.belongsTo(Category, {
+    foreignKey: 'categoryId',
+    as: 'category'
+});
+
+// --- Producto e Imágenes Destacadas ---
+Product.hasMany(FeaturedImage, {
+    foreignKey: 'productId',
+    as: 'featuredImages',
+    onDelete: 'SET NULL'
+});
+FeaturedImage.belongsTo(Product, {
+    foreignKey: 'productId',
+    as: 'product'
+});
+
+// --- Partner y Productos ---
+Partner.hasMany(Product, {
+    foreignKey: 'partnerId',
+    as: 'products',
+    onDelete: 'SET NULL'
+});
+Product.belongsTo(Partner, {
+    foreignKey: 'partnerId',
+    as: 'partner'
 });
 
 // ====================================
@@ -165,8 +198,9 @@ const syncModels = async () => {
             return;
         }
 
+        // [Migración PostgreSQL]: Se usa { alter: true } para actualizar la estructura sin borrar datos
         await sequelize.sync({ alter: true });
-        console.log('✅ Modelos sincronizados con MySQL (alter: true)');
+        console.log('✅ Modelos sincronizados con PostgreSQL (alter: true)');
         console.log('📋 Tablas disponibles: Users, UserAddresses, Categories, Brands, Products, Services, Carts, CartItems, Quotes, QuoteItems, FeaturedImages, Partners');
     } catch (error) {
         console.error('❌ Error al sincronizar modelos:', error.message);

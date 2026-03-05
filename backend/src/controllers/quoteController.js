@@ -233,7 +233,8 @@ exports.getMyQuotes = asyncHandler(async (req, res) => {
  * @access  Private
  */
 exports.getQuote = asyncHandler(async (req, res) => {
-    const quote = await loadQuoteWithItems(req.params.id, req.user.id);
+    const userId = req.user.role === 'admin' ? null : req.user.id;
+    const quote = await loadQuoteWithItems(req.params.id, userId);
 
     if (!quote) {
         return res.status(404).json({ success: false, message: 'Cotización no encontrada' });
@@ -248,7 +249,8 @@ exports.getQuote = asyncHandler(async (req, res) => {
  * @access  Private
  */
 exports.downloadQuotePDF = asyncHandler(async (req, res) => {
-    const quote = await loadQuoteWithItems(req.params.id, req.user.id);
+    const userId = req.user.role === 'admin' ? null : req.user.id;
+    const quote = await loadQuoteWithItems(req.params.id, userId);
 
     if (!quote) {
         return res.status(404).json({ success: false, message: 'Cotización no encontrada' });
@@ -411,8 +413,8 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     const globalTotals = await Quote.findOne({
         attributes: [
             [fn('COUNT', col('id')), 'totalQuotes'],
-            [fn('SUM', col('totalAmount')), 'totalRevenue'],
-            [fn('AVG', col('totalAmount')), 'avgQuoteValue']
+            [fn('SUM', col('total_amount')), 'totalRevenue'],
+            [fn('AVG', col('total_amount')), 'avgQuoteValue']
         ],
         raw: true
     });
@@ -423,7 +425,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         attributes: [
             'status',
             [fn('COUNT', col('id')), 'count'],
-            [fn('SUM', col('totalAmount')), 'total']
+            [fn('SUM', col('total_amount')), 'total']
         ],
         group: ['status'],
         raw: true
@@ -437,12 +439,12 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
 
     const [monthlyTrend] = await sequelize.query(`
         SELECT
-            DATE_FORMAT(createdAt, '%Y-%m') AS month,
+            TO_CHAR(created_at, 'YYYY-MM')  AS month,
             COUNT(id)                        AS count,
-            SUM(totalAmount)                 AS total
-        FROM Quotes
-        WHERE createdAt >= :sixMonthsAgo
-        GROUP BY DATE_FORMAT(createdAt, '%Y-%m')
+            SUM(total_amount)               AS total
+        FROM quotes
+        WHERE created_at >= :sixMonthsAgo
+        GROUP BY TO_CHAR(created_at, 'YYYY-MM')
         ORDER BY month ASC
     `, {
         replacements: { sixMonthsAgo },

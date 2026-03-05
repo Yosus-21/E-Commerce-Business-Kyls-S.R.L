@@ -54,12 +54,9 @@ QuoteItem.init(
     {
         sequelize,
         modelName: 'QuoteItem',
-        tableName: 'QuoteItems',
-        timestamps: false, // No necesitamos timestamps en esta tabla de detalle
-        indexes: [
-            { fields: ['quoteId'] },
-            { fields: ['productId'] }
-        ]
+        tableName: 'quote_items',
+        underscored: true,
+        timestamps: false // No necesitamos timestamps en esta tabla de detalle
     }
 );
 

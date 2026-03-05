@@ -36,11 +36,9 @@ Cart.init(
     {
         sequelize,
         modelName: 'Cart',
-        tableName: 'Carts',
-        timestamps: true,
-        indexes: [
-            { fields: ['userId'], unique: true }
-        ]
+        tableName: 'carts',
+        underscored: true,
+        timestamps: true
     }
 );
 

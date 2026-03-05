@@ -58,11 +58,9 @@ UserAddress.init(
     {
         sequelize,
         modelName: 'UserAddress',
-        tableName: 'UserAddresses',
-        timestamps: true,
-        indexes: [
-            { fields: ['userId'] }
-        ]
+        tableName: 'user_addresses',
+        underscored: true,
+        timestamps: true
     }
 );
 

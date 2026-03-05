@@ -104,12 +104,17 @@ Product.init(
         views: {
             type: DataTypes.INTEGER,
             defaultValue: 0
+        },
+        partnerId: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         }
     },
     {
         sequelize,
         modelName: 'Product',
-        tableName: 'Products',
+        tableName: 'products',
+        underscored: true,
         timestamps: true,
         // Incluir getters virtuales en toJSON()
         getterMethods: {
@@ -122,22 +127,7 @@ Product.init(
                 }
                 return this.price;
             }
-        },
-        indexes: [
-            { fields: ['slug'], unique: true },
-            { fields: ['categoryId'] },
-            { fields: ['brandId'] },
-            { fields: ['price'] },
-            { fields: ['isFeatured'] },
-            { fields: ['isActive'] },
-            { fields: ['createdAt'] },
-            // Índice FULLTEXT para búsqueda por nombre (MySQL)
-            {
-                type: 'FULLTEXT',
-                fields: ['name'],
-                name: 'product_name_fulltext'
-            }
-        ]
+        }
     }
 );
 

@@ -56,18 +56,18 @@ Service.init(
         views: {
             type: DataTypes.INTEGER,
             defaultValue: 0
+        },
+        categoryId: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         }
     },
     {
         sequelize,
         modelName: 'Service',
-        tableName: 'Services',
-        timestamps: true,
-        indexes: [
-            { fields: ['slug'], unique: true },
-            { fields: ['isActive'] },
-            { fields: ['createdAt'] }
-        ]
+        tableName: 'services',
+        underscored: true,
+        timestamps: true
     }
 );
 

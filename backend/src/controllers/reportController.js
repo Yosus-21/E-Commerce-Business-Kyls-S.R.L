@@ -335,7 +335,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
             // Si la tabla está vacía, devuelve { total: null }. COALESCE no siempre es estable en dialectos agnósticos
             Quote.findOne({
                 attributes: [
-                    [fn('SUM', col('totalAmount')), 'total']
+                    [fn('SUM', col('total_amount')), 'total']
                 ],
                 raw: true
             }),
@@ -348,7 +348,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
                 attributes: [
                     'status',
                     [fn('COUNT', col('id')), 'count'],
-                    [fn('SUM', col('totalAmount')), 'total']
+                    [fn('SUM', col('total_amount')), 'total']
                 ],
                 group: ['status'],
                 raw: true
@@ -357,13 +357,13 @@ exports.getDashboard = asyncHandler(async (req, res) => {
             // ── Tendencia diaria (últimos 30 días) ───────────────────────────
             sequelize.query(`
                 SELECT
-                    DATE_FORMAT(createdAt, '%d/%m')  AS date,
-                    COUNT(id)                        AS count,
-                    SUM(totalAmount)                 AS total
-                FROM Quotes
-                WHERE createdAt >= :thirtyDaysAgo
-                GROUP BY DATE_FORMAT(createdAt, '%d/%m'), DATE(createdAt)
-                ORDER BY DATE(createdAt) ASC
+                    TO_CHAR(created_at, 'DD/MM')  AS date,
+                    COUNT(id)                      AS count,
+                    SUM(total_amount)             AS total
+                FROM quotes
+                WHERE created_at >= :thirtyDaysAgo
+                GROUP BY TO_CHAR(created_at, 'DD/MM'), DATE(created_at)
+                ORDER BY DATE(created_at) ASC
             `, {
                 replacements: { thirtyDaysAgo },
                 type: sequelize.QueryTypes.SELECT
@@ -372,16 +372,16 @@ exports.getDashboard = asyncHandler(async (req, res) => {
             // ── Top 5 clientes por cotizaciones (SAFE JSON QUERY) ────────────
             sequelize.query(`
                 SELECT
-                    JSON_UNQUOTE(JSON_EXTRACT(customerData, '$.name'))  AS name,
-                    JSON_UNQUOTE(JSON_EXTRACT(customerData, '$.email')) AS email,
-                    COUNT(id)                                            AS quoteCount,
-                    SUM(totalAmount)                                     AS totalValue
-                FROM Quotes
-                WHERE customerData IS NOT NULL
+                    customer_data->>'name'  AS name,
+                    customer_data->>'email' AS email,
+                    COUNT(id)               AS quote_count,
+                    SUM(total_amount)       AS total_value
+                FROM quotes
+                WHERE customer_data IS NOT NULL
                 GROUP BY 
-                    JSON_UNQUOTE(JSON_EXTRACT(customerData, '$.email')), 
-                    JSON_UNQUOTE(JSON_EXTRACT(customerData, '$.name'))
-                ORDER BY quoteCount DESC
+                    customer_data->>'email', 
+                    customer_data->>'name'
+                ORDER BY quote_count DESC
                 LIMIT 5
             `, { type: sequelize.QueryTypes.SELECT }),
 
@@ -390,11 +390,11 @@ exports.getDashboard = asyncHandler(async (req, res) => {
                 attributes: [
                     'productId',
                     'name',
-                    [fn('SUM', col('quantity')), 'totalQuantity'],
-                    [fn('COUNT', col('QuoteItem.id')), 'timesQuoted']
+                    [fn('SUM', col('quantity')), 'total_quantity'],
+                    [fn('COUNT', col('QuoteItem.id')), 'times_quoted']
                 ],
-                group: ['productId', 'name'],
-                order: [[literal('totalQuantity'), 'DESC']],
+                group: [col('product_id'), 'QuoteItem.name'],
+                order: [[literal('total_quantity'), 'DESC']],
                 limit: 5,
                 raw: true
             }),
@@ -412,7 +412,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
                     attributes: [],
                     required: true
                 }],
-                group: ['category.id', 'category.name'],
+                group: [col('category.id'), col('category.name')],
                 order: [[literal('count'), 'DESC']],
                 raw: true
             }),
@@ -466,8 +466,8 @@ exports.getDashboard = asyncHandler(async (req, res) => {
 
         const topProducts = (topProductsRaw || []).map(p => ({
             name: p.name,
-            totalQuantity: parseInt(p.totalQuantity, 10) || 0,
-            timesQuoted: parseInt(p.timesQuoted, 10) || 0,
+            totalQuantity: parseInt(p.total_quantity, 10) || 0,
+            timesQuoted: parseInt(p.times_quoted, 10) || 0,
             productId: p.productId
         }));
 
@@ -479,8 +479,8 @@ exports.getDashboard = asyncHandler(async (req, res) => {
         const topClientsList = (topClients || []).map(c => ({
             name: c.name || 'Desconocido',
             email: c.email || 'Sin correo',
-            quoteCount: parseInt(c.quoteCount, 10) || 0,
-            totalValue: parseFloat(c.totalValue) || 0
+            quoteCount: parseInt(c.quote_count, 10) || 0,
+            totalValue: parseFloat(c.total_value) || 0
         }));
 
         // Revenue global (Fallback seguro a 0 si la tabla está vacía)

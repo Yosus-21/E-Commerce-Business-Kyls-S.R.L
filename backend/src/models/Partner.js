@@ -37,11 +37,9 @@ Partner.init(
     {
         sequelize,
         modelName: 'Partner',
-        tableName: 'Partners',
-        timestamps: true,
-        indexes: [
-            { fields: ['isActive'] }
-        ]
+        tableName: 'partners',
+        underscored: true,
+        timestamps: true
     }
 );
 
